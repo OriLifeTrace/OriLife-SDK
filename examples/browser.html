@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>OriLife -- look up a fruit from the browser</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!--
+  This page proves one specific thing: a static HTML file, opened with file:// or hosted at any
+  domain, calls the OriLife API directly with no intermediary server and no origin allowlist to
+  request. That is a consequence of CORS being open to every origin.
+
+  It uses the PUBLIC lane, so no account is needed: a shopper photographs a fruit on display and
+  looks up where it came from. There is no key anywhere in this file -- and that is exactly why it
+  can be hosted anywhere.
+-->
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+         max-width: 46rem; margin: 0 auto; padding: 2rem 1.2rem 4rem; }
+  h1 { font-size: 1.4rem; letter-spacing: -.02em; }
+  .hint { opacity: .75; font-size: .95rem; }
+  input[type=file] { margin: 1.2rem 0; }
+  #result { margin-top: 1.4rem; }
+  .card { border: 1px solid rgba(128,128,128,.35); border-radius: .7rem;
+         padding: .8rem 1rem; margin: .6rem 0; }
+  .card img { max-width: 100%; border-radius: .4rem; display: block; margin-top: .5rem; }
+  .error { color: #b00020; }
+  @media (prefers-color-scheme: dark) { .error { color: #ff8a80; } }
+</style>
+
+<h1>Where is this fruit from?</h1>
+<p class="hint">Pick a photo of a fruit. No login needed -- this is the public lane.</p>
+
+<input type="file" id="photo" accept="image/*">
+<div id="result"></div>
+
+<script type="module">
+  // In a real project: npm i @orilife/sdk, then `import { Client } from '@orilife/sdk'`.
+  // Here it points straight at the source in this repo so opening the file with file:// just works.
+  import { Client } from '../javascript/src/index.js';
+
+  const client = new Client();
+  const box = document.getElementById('result');
+  const show = (html) => { box.innerHTML = html; };
+
+  document.getElementById('photo').addEventListener('change', async (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    show('<p class="hint">Looking it up...</p>');
+
+    try {
+      const out = await client.lookupFruit(file);
+
+      // Three possible shapes of reply, and the first is the most common one -- skip handling it
+      // and the page looks broken. Frame has multiple fruits (or none) => the server asks the
+      // user to point at the right one and resend with a bbox. `regions` is ALWAYS a list, empty
+      // rather than null.
+      if (out.need_region) {
+        const n = (out.regions || []).length;
+        show(`<p>${out.message}</p><p class="hint">${n
+          ? `Found ${n} fruits in the frame -- retake the photo with only one fruit in it.`
+          : 'No fruit found in the frame yet.'}</p>`);
+        return;
+      }
+
+      const items = out.candidates || [];
+      if (!items.length) {
+        // "Not found" is an OUTCOME. Don't show a spinner, don't retry on your own.
+        show(`<p>${out.message || 'This fruit has not been seen in the public set yet.'}</p>`);
+        return;
+      }
+
+      show(items.map((c) => {
+        const tree = c.tree || {};
+        return `
+        <div class="card">
+          <b>${c.name || 'unnamed fruit'}</b>
+          ${tree.code ? `<div class="hint">tree ${tree.name || ''} - ${tree.code}</div>` : ''}
+          <div class="hint">enrolled ${c.enrolled_at || '?'} - ${c.n_imgs || 0} photos</div>
+          ${(c.img_urls || []).slice(0, 1).map((u) => `<img src="${u}" alt="">`).join('')}
+        </div>`;
+      }).join(''));
+    } catch (e) {
+      // `message` is the sentence the server already wrote for a human reader. Show it as-is --
+      // the server knows the context, this page does not.
+      show(`<p class="error">${e.message}</p>`);
+    }
+  });
+</script>

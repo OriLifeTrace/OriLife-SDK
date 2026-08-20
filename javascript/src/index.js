@@ -1,14 +1,14 @@
 /**
- * Bộ công cụ OriLife — định danh cá thể bằng chính ảnh chụp nó.
+ * The OriLife SDK — identifying individuals from photographs of them.
  *
- * Hai nửa, cố ý tách rời:
+ * Two halves, deliberately kept apart:
  *
- *   import { Client } from '@orilife/sdk';          // gọi API
- *   import * as verify from '@orilife/sdk/verify';  // kiểm chứng độc lập, không mạng
+ *   import { Client } from '@orilife/sdk';          // call the API
+ *   import * as verify from '@orilife/sdk/verify';  // independent verification, no network
  *
- * Nửa thứ hai là nửa quan trọng. `Client` chỉ hỏi máy chủ rồi chép lại câu trả lời — dùng nó thì
- * bạn đang tin OriLife. `verify` tính lại mã băm từ chính bản ghi, nên nó kiểm được lời khai của
- * OriLife mà không cần OriLife có mặt.
+ * The second half is the one that matters. `Client` asks the server and repeats the answer — using
+ * it means you are trusting OriLife. `verify` recomputes hashes from the record itself, so it can
+ * check what OriLife claims without OriLife being present.
  */
 export { Client, DEFAULT_BASE_URL } from './client.js';
 export {

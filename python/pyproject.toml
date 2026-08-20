@@ -5,15 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "orilife"
 version = "1.0.0"
-description = "Định danh cá thể cây, quả và con vật bằng ảnh — bộ công cụ chính thức của OriLife"
+description = "Identify individual trees, fruit and animals from photographs — the official OriLife SDK"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
 authors = [{ name = "OriLife" }]
 keywords = ["traceability", "agriculture", "identification", "cardano", "provenance"]
-# KHÔNG có dependencies, và đó là một quyết định chứ không phải thiếu sót: bộ này phải chạy được
-# trong máy tính nhúng ngoài đồng, trong hộp cát của một tác tử, trong hàm không máy chủ có trần
-# dung lượng. Thư viện chuẩn đủ làm mọi việc ở đây.
+# NO dependencies, and that is a decision rather than an omission: this package has to run on an
+# embedded box in a field, inside an agent's sandbox, in a serverless function with a size cap. The
+# standard library covers everything needed here.
 dependencies = []
 
 [project.urls]

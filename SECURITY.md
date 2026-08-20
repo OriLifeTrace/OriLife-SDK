@@ -1,54 +1,93 @@
-# An toàn
+# Security
 
-## Báo lỗ hổng
+## Reporting a vulnerability
 
-Gửi về `security@orilife.io`. Đừng mở issue công khai cho lỗ hổng — cho chúng tôi thời gian vá
-trước khi nó thành công thức cho người khác.
+Send it to `security@orilife.io`. Please do not open a public issue for a vulnerability — give us
+time to fix it before it becomes a recipe for somebody else.
 
-## Khoá đi đâu, và không đi đâu
+Include what you did, what you saw, and how to reproduce it. If you need a reply in English, say so;
+we will answer in English.
 
-**Khoá thuộc về người dùng, không thuộc về ứng dụng.** Mỗi người dùng đăng nhập bằng tài khoản của
-chính họ và nhận khoá riêng. Đừng nhúng một tài khoản dùng chung vào ứng dụng rồi để mọi người
-dùng đi qua nó: mọi người sẽ nhìn thấy vườn của nhau, và khi cần thu hồi thì không thu hồi được
-riêng ai.
+For ordinary integration questions (not vulnerabilities), open an issue in this repository instead.
 
-**Không nhúng mật khẩu hay khoá vào gói ứng dụng.** Tệp `.apk`, `.ipa` và gói JavaScript đều mở ra
-đọc được. Mọi thứ nhúng vào đó là công khai, chỉ là chưa ai để ý.
+---
 
-**Khoá sống 12 giờ.** Hết hạn thì cửa trả `401`. Bắt lấy và đăng nhập lại; đừng giữ mật khẩu trong
-bộ nhớ suốt vòng đời ứng dụng để tự đăng nhập lại ngầm — đó là đổi một lỗi nhìn thấy được lấy một
-rủi ro không nhìn thấy.
+## Where tokens go, and where they must not
 
-**Giữ khoá ở kho khoá của hệ điều hành**, không ở `localStorage` nếu ứng dụng có phần nào chạy
-trong trình duyệt.
+**A token belongs to a user, not to your application.** Each user signs in with their own account
+and gets their own token. Do not embed one shared account in your app and route everyone through
+it: everyone would see everyone else's holdings, and when you need to revoke access you would have
+no way to revoke just one person.
 
-**Nghi lộ thì gọi `POST /api/logout-all`** — nó bỏ mọi khoá của tài khoản, không riêng khoá đang cầm.
+**Never ship a password or a token inside an application bundle.** `.apk`, `.ipa` and JavaScript
+bundles can all be opened and read. Anything embedded in them is public — it just has not been
+noticed yet. The same goes for committing them to a repository, including a private one.
 
-## Trình duyệt
+**Tokens live 12 hours.** After that, endpoints return `401`. Catch it and sign in again. Do not
+keep the password in memory for the lifetime of the app so you can silently re-authenticate — that
+trades a visible error for an invisible risk.
 
-Máy chủ mở CORS cho mọi origin, kèm **không** gửi cookie khác origin. Hai vế đi cùng nhau và vế thứ
-hai mới là vế giữ an toàn: không có cookie đi kèm thì không có quyền-đi-kèm nào để một trang web lạ
-lợi dụng, và cả lớp CSRF biến mất. Đổi lại, khoá **phải** đi bằng header `Authorization: Bearer`.
+**Store tokens in the operating system's keystore**, not in `localStorage`, if any part of your app
+runs in a browser.
 
-Đường cookie chỉ hoạt động ở cùng origin với máy chủ.
+**If you suspect a leak, call `POST /api/logout-all`.** It drops every token on the account, not
+just the one you are holding.
 
-## Dữ liệu người dùng
+---
 
-**Ảnh gửi lên là ảnh vườn của một người thật.** Đừng ghi chúng vào nhật ký, đừng gửi sang dịch vụ
-thứ ba để "tiện gỡ lỗi", đừng giữ lại sau khi đã dùng xong.
+## Browsers
 
-**Toạ độ là dữ liệu nhạy cảm.** Nó chỉ đúng tới gốc cây của một người. Cửa công khai đã làm thô
-toạ độ trước khi trả; đừng khôi phục lại độ chính xác bằng dữ liệu bạn có từ nguồn khác rồi công
-bố.
+CORS is open to every origin, and cross-origin cookies are **not** sent. Both halves go together,
+and the second is the one doing the security work: with no cookie riding along there is no ambient
+authority for a hostile page to borrow, and the whole CSRF class disappears. In exchange, the token
+**must** travel in the `Authorization: Bearer` header.
 
-**Không đưa dữ liệu cá nhân vào chuỗi truy vấn.** Chuỗi truy vấn rơi vào nhật ký của mọi máy trên
-đường đi. Bộ công cụ này gửi mật khẩu trong thân JSON chính vì lý do đó.
+The cookie path only works same-origin with the server.
 
-## Kiểm chứng
+---
 
-Bộ kiểm chứng (`orilife.verify`, `@orilife/sdk/verify`) không mạng, không phụ thuộc, không trạng
-thái. Đó là chủ ý: một bộ kiểm chứng phải kiểm được cả trong trường hợp bạn không tin bên đã viết
-ra nó. Đọc hết `python/orilife/verify.py` mất chừng mười phút.
+## User data
 
-Đối chiếu với bộ vector trong `python/tests/vectors.json` — sinh từ chính mã đang chạy trên máy
-chủ, và cả hai bản cài đặt (Python, JavaScript) đều phải khớp.
+**The photographs are somebody's real orchard.** Do not write them to logs, do not forward them to a
+third-party service "just for debugging", and do not keep them after you are done with them.
+
+**Coordinates are sensitive.** They point at one person's individual trees. The public lane already
+coarsens coordinates before returning them; do not restore the precision from another data source
+you happen to hold and then publish the result.
+
+**Keep personal data out of query strings.** Query strings end up in the logs of every machine along
+the path. That is exactly why this SDK sends passwords in a JSON body.
+
+**What OriLife itself retains server-side is not documented in this repository.** One thing that is:
+video submitted to `POST /api/identify/video` is used to select frames and then discarded, not
+stored. If your deployment needs a retention commitment in writing, ask before you build on the
+assumption.
+
+**Deleting an account is a real operation, not a support ticket.** `GET /api/account/data` previews
+everything an account owns; `POST /api/account/delete` erases it and requires re-typing the owner
+code. Note there is no separate sandbox tier: an account you created to try things out is a real
+account holding real data, so clean it up when you are done.
+
+---
+
+## The verifier
+
+`orilife.verify` and `@orilife/sdk/verify` have no network access, no dependencies and no state.
+That is deliberate: a verifier must still work when you do not trust the people who wrote it. You
+can read `python/orilife/verify.py` end to end in about ten minutes, which is the point.
+
+It is checked against the vectors in `python/tests/vectors.json`, generated from the code running on
+the server, and both implementations (Python and JavaScript) must match. Details, and the procedure
+for doing every step by hand without this SDK at all: [VERIFY.md](VERIFY.md).
+
+---
+
+## Supply chain
+
+The packages have **no runtime dependencies** — Python uses only the standard library, JavaScript
+only what the runtime already provides. That is a security property, not an aesthetic one: there is
+no transitive dependency tree to be compromised on your behalf, and the whole surface fits in a code
+review.
+
+If you vendor the verifier rather than installing it, pin the file and re-run the vector tests after
+each update. A verifier you have not tested since you copied it is not a verifier.

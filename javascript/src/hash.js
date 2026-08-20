@@ -1,16 +1,16 @@
 /**
- * BLAKE2b và SHA3-256 viết thuần JavaScript, không phụ thuộc gì.
+ * BLAKE2b and SHA3-256 in plain JavaScript, with no dependencies.
  *
- * Vì sao phải tự viết. Trình duyệt có WebCrypto nhưng WebCrypto chỉ có SHA-1/SHA-2 — không có
- * SHA-3, không có BLAKE2b. Node có `crypto` nhưng OpenSSL chỉ cho BLAKE2b-512, trong khi bản ghi
- * OriLife dùng BLAKE2b với độ dài đầu ra 32 byte. Hai thứ đó KHÔNG phải một: BLAKE2b nhét độ dài
- * đầu ra vào khối tham số ngay từ giá trị khởi tạo, nên cắt ngắn BLAKE2b-512 xuống 32 byte cho ra
- * một con số hoàn toàn khác. Ai "tối ưu" chỗ này bằng cách cắt ngắn sẽ làm mọi bản ghi cũ đọc
- * thành bị sửa.
+ * Why write them by hand. Browsers ship WebCrypto, but WebCrypto only has SHA-1/SHA-2 — no SHA-3,
+ * no BLAKE2b. Node ships `crypto`, but OpenSSL only offers BLAKE2b-512, while OriLife records use
+ * BLAKE2b with a 32-byte output length. Those two are NOT the same thing: BLAKE2b folds the output
+ * length into the parameter block of the initial value, so truncating BLAKE2b-512 to 32 bytes gives
+ * a completely different number. Anyone who "optimises" this by truncating makes every old record
+ * read as tampered with.
  *
- * Dùng BigInt cho các thanh ghi 64 bit thay vì ghép hai số 32 bit. Chậm hơn vài lần, nhưng thứ
- * cần băm ở đây là một bản ghi vài trăm byte chứ không phải một luồng video — và mã ngắn thì đọc
- * được bằng mắt, mà cả tệp này tồn tại để người ngoài đọc bằng mắt.
+ * The 64-bit registers use BigInt instead of two stitched 32-bit numbers. Several times slower, but
+ * what gets hashed here is a record of a few hundred bytes, not a video stream — and short code can
+ * be read with the eyes, which is the whole reason this file exists.
  */
 
 const M64 = (1n << 64n) - 1n;
@@ -21,7 +21,7 @@ function toBytes(input) {
   if (typeof input === 'string') return new TextEncoder().encode(input);
   if (input instanceof Uint8Array) return input;
   if (input instanceof ArrayBuffer) return new Uint8Array(input);
-  throw new TypeError('cần chuỗi, Uint8Array hoặc ArrayBuffer');
+  throw new TypeError('expected a string, a Uint8Array or an ArrayBuffer');
 }
 
 const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
@@ -41,9 +41,10 @@ const KECCAK_ROT = [
   25n, 39n, 41n, 45n, 15n, 21n, 8n, 18n, 2n, 61n, 56n, 14n,
 ];
 /**
- * Hoán vị π, TÍNH RA chứ không chép tay: lane (x, y) chuyển tới (y, 2x+3y mod 5), với chỉ số
- * phẳng i = x + 5y. Bảng này chép tay sai một ô thì SHA3 vẫn chạy, vẫn ra 32 byte trông ngẫu
- * nhiên, và chỉ lộ khi đối chiếu với một giá trị chuẩn — nên tính ra là rẻ hơn.
+ * The π permutation, COMPUTED rather than copied by hand: lane (x, y) moves to (y, 2x+3y mod 5),
+ * with the flat index i = x + 5y. Get one cell of this table wrong by hand and SHA3 still runs,
+ * still returns 32 random-looking bytes, and only breaks when compared against a known value — so
+ * computing it is the cheaper option.
  */
 const KECCAK_PI = (() => {
   const map = new Array(25);
@@ -64,7 +65,7 @@ function keccakF(state) {
       const d = c[(x + 4) % 5] ^ rotl(c[(x + 1) % 5], 1n);
       for (let y = 0; y < 25; y += 5) state[x + y] ^= d;
     }
-    // ρ và π
+    // ρ and π
     const b = new Array(25);
     for (let i = 0; i < 25; i += 1) b[KECCAK_PI[i]] = rotl(state[i], KECCAK_ROT[i]);
     // χ
@@ -78,7 +79,7 @@ function keccakF(state) {
   }
 }
 
-/** SHA3-256 theo FIPS 202: nhịp 136 byte, đệm 0x06 … 0x80. */
+/** SHA3-256 per FIPS 202: rate of 136 bytes, padding 0x06 … 0x80. */
 export function sha3_256(input) {
   const message = toBytes(input);
   const RATE = 136;
@@ -162,14 +163,16 @@ function compress(h, block, counter, last) {
 }
 
 /**
- * BLAKE2b với độ dài đầu ra tuỳ chọn (mặc định 32 byte — bằng `hashlib.blake2b(digest_size=32)`).
+ * BLAKE2b with a chosen output length (32 bytes by default — the same as
+ * `hashlib.blake2b(digest_size=32)`).
  *
- * `outLen` đi vào khối tham số của giá trị khởi tạo, nên đổi nó là đổi TOÀN BỘ phép băm chứ không
- * phải cắt ngắn kết quả. Đây chính là chỗ mà một bản cài đặt dựa vào BLAKE2b-512 rồi cắt sẽ sai.
+ * `outLen` goes into the parameter block of the initial value, so changing it changes the WHOLE
+ * hash rather than truncating the result. This is exactly where an implementation built on
+ * BLAKE2b-512 plus a slice gets it wrong.
  */
 export function blake2b(input, outLen = 32) {
   if (!Number.isInteger(outLen) || outLen < 1 || outLen > 64) {
-    throw new RangeError('outLen phải trong khoảng 1..64');
+    throw new RangeError('outLen must be between 1 and 64');
   }
   const message = toBytes(input);
   const h = [...BLAKE2B_IV];
@@ -191,7 +194,7 @@ export function blake2b(input, outLen = 32) {
   return hex(out);
 }
 
-/** SHA-256 — có sẵn ở mọi nơi qua WebCrypto, nên chỉ bọc lại cho đồng nhất giao diện. */
+/** SHA-256 — available everywhere through WebCrypto, so this only wraps it for a uniform API. */
 export async function sha256(input) {
   const digest = await crypto.subtle.digest('SHA-256', toBytes(input));
   return hex(new Uint8Array(digest));

@@ -1,5 +1,5 @@
 {
-  "canonical_json_utf8_sha256": "62312963f218b9a76679dce475269ab0e26f0d98dae2d918eb2dbf285563f0e3",
+  "canonical_json_utf8_sha256": "2292d7db80795c0ea046e47a447014403337d7c9ea9bfc581c3bcb12892b8009",
   "codes": [
     {
       "code": "ORI-w3gv5p7-6PCA7HC8",
@@ -51,7 +51,7 @@
     "images": [
       {
         "cid": "ln1q_abc",
-        "factor": "PLANT",
+        "kind": "tree",
         "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
       }
     ],
@@ -61,7 +61,7 @@
     "tree_id": "t-1",
     "v": 2
   },
-  "record_hash_sha3_256": "75bc0ed78c31321ac501a25a2950818e76e6fe38b387337f4044a70d542de797",
+  "record_hash_sha3_256": "e5cfb70c740ccdd9cf86cfd65aa5b6663e33bb702d68e9d7fab47640f6f7376a",
   "record_v1": {
     "code": "ORI-w3gexrq-RD0N25FG",
     "embedding_hash": "1111111111111111111111111111111111111111111111111111111111111111",
@@ -73,7 +73,7 @@
     "images": [
       {
         "cid": "ln1q_abc",
-        "factor": "PLANT",
+        "kind": "tree",
         "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
       }
     ],
@@ -83,5 +83,5 @@
     "tree_id": "t-1",
     "v": 1
   },
-  "record_v1_hash_blake2b_256": "ccdc7b52d7ba8e42b8acb8e5e0b8a639972e5286faed86441e85a77ed2d1433e"
+  "record_v1_hash_blake2b_256": "877b4e61760aca0441bd783e95a2e70a92d3d3cbb725f64863e227da4a64bc70"
 }
