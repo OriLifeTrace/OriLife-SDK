@@ -1,0 +1,22 @@
+{
+  "name": "@orilife/sdk",
+  "version": "1.0.0",
+  "description": "Định danh cá thể cây, quả và con vật bằng ảnh — bộ công cụ chính thức của OriLife",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./verify": "./src/verify.js",
+    "./hash": "./src/hash.js",
+    "./errors": "./src/errors.js"
+  },
+  "files": ["src", "README.md"],
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test test/" },
+  "keywords": ["traceability", "agriculture", "identification", "cardano", "provenance", "orilife"],
+  "license": "Apache-2.0",
+  "repository": { "type": "git", "url": "git+https://github.com/OriLifeTrace/OriLife-SDK.git" },
+  "homepage": "https://api.orilife.io",
+  "dependencies": {},
+  "devDependencies": {}
+}

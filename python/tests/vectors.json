@@ -1,0 +1,87 @@
+{
+  "canonical_json_utf8_sha256": "62312963f218b9a76679dce475269ab0e26f0d98dae2d918eb2dbf285563f0e3",
+  "codes": [
+    {
+      "code": "ORI-w3gv5p7-6PCA7HC8",
+      "entity_id": "11111111-2222-3333-4444-555555555555",
+      "gps": [
+        10.762622,
+        106.660172
+      ]
+    },
+    {
+      "code": "ORI-w6h3sjx-9KYR3TZF",
+      "entity_id": "cay-so-47",
+      "gps": [
+        11.5449,
+        107.4123
+      ]
+    },
+    {
+      "code": "ORI-0000000-1NRMJVGE",
+      "entity_id": "khong-toa-do",
+      "gps": null
+    },
+    {
+      "code": "ORI-w7epxsh-Y72HB4BC",
+      "entity_id": "â cây có dấu",
+      "gps": [
+        21.028511,
+        105.804817
+      ]
+    },
+    {
+      "code": "ORI-r3gx2f7-9BFM6SZS",
+      "entity_id": "x",
+      "gps": [
+        -33.8688,
+        151.2093
+      ]
+    }
+  ],
+  "record": {
+    "code": "ORI-w3gexrq-RD0N25FG",
+    "embedding_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "enrolled_at": "2026-06-03T00:00:00Z",
+    "gps": [
+      10.5,
+      106.5
+    ],
+    "hash_alg": "sha3-256",
+    "images": [
+      {
+        "cid": "ln1q_abc",
+        "factor": "PLANT",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "model3d": null,
+    "n_views": 6,
+    "name": "cây sầu riêng số 47",
+    "tree_id": "t-1",
+    "v": 2
+  },
+  "record_hash_sha3_256": "75bc0ed78c31321ac501a25a2950818e76e6fe38b387337f4044a70d542de797",
+  "record_v1": {
+    "code": "ORI-w3gexrq-RD0N25FG",
+    "embedding_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "enrolled_at": "2026-06-03T00:00:00Z",
+    "gps": [
+      10.5,
+      106.5
+    ],
+    "images": [
+      {
+        "cid": "ln1q_abc",
+        "factor": "PLANT",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "model3d": null,
+    "n_views": 6,
+    "name": "cây sầu riêng số 47",
+    "tree_id": "t-1",
+    "v": 1
+  },
+  "record_v1_hash_blake2b_256": "ccdc7b52d7ba8e42b8acb8e5e0b8a639972e5286faed86441e85a77ed2d1433e"
+}

@@ -1,0 +1,56 @@
+name: Bài kiểm
+
+# Hai bộ kiểm chứng đối chiếu với CÙNG một bộ vector sinh từ mã đang chạy trên máy chủ. Chạy cả
+# hai trong một lượt là chủ ý: một lỗi phải xuất hiện y hệt ở cả hai ngôn ngữ mới lọt được.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 3.9 là sàn đã hứa trong pyproject. Hứa mà không chạy thử thì đó không phải lời hứa.
+        python-version: ['3.9', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install pytest
+      - run: python -m pytest tests/ -q
+        working-directory: python
+
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node --test test/
+        working-directory: javascript
+
+  khong-phu-thuoc:
+    # Bộ này khai KHÔNG phụ thuộc gì. Lời khai đó phải có thứ canh, vì một dòng `import requests`
+    # lọt vào sẽ không làm bài kiểm nào đỏ — nó chỉ làm bộ này ngừng chạy được ở nơi không cài
+    # thêm được gì, mà đó đúng là nơi bộ này sinh ra để chạy.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python chỉ dùng thư viện chuẩn
+        run: |
+          if grep -rnE '^\s*(import|from)\s+(requests|httpx|aiohttp|numpy|pydantic)\b' python/orilife/; then
+            echo "::error::bộ Python đã lỡ phụ thuộc thư viện ngoài"; exit 1
+          fi
+      - name: JavaScript không có dependencies
+        run: |
+          python3 - <<'PY'
+          import json
+          pkg = json.load(open('javascript/package.json'))
+          extra = {**pkg.get('dependencies', {}), **pkg.get('devDependencies', {})}
+          if extra:
+              raise SystemExit(f"::error::bộ JavaScript đã lỡ phụ thuộc: {sorted(extra)}")
+          PY
