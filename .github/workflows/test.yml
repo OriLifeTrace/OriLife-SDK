@@ -1,7 +1,8 @@
-name: Bài kiểm
+name: Tests
 
-# Hai bộ kiểm chứng đối chiếu với CÙNG một bộ vector sinh từ mã đang chạy trên máy chủ. Chạy cả
-# hai trong một lượt là chủ ý: một lỗi phải xuất hiện y hệt ở cả hai ngôn ngữ mới lọt được.
+# Both suites check against the SAME vector set, generated from the code actually running on the
+# server. Running both in one pass is deliberate: a bug only slips through if it shows up
+# identically in both languages.
 on:
   push:
     branches: ['**']
@@ -12,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # 3.9 là sàn đã hứa trong pyproject. Hứa mà không chạy thử thì đó không phải lời hứa.
+        # 3.9 is the floor promised in pyproject. A promise nobody runs is not a promise.
         python-version: ['3.9', '3.12']
     steps:
       - uses: actions/checkout@v4
@@ -33,24 +34,25 @@ jobs:
       - run: node --test test/
         working-directory: javascript
 
-  khong-phu-thuoc:
-    # Bộ này khai KHÔNG phụ thuộc gì. Lời khai đó phải có thứ canh, vì một dòng `import requests`
-    # lọt vào sẽ không làm bài kiểm nào đỏ — nó chỉ làm bộ này ngừng chạy được ở nơi không cài
-    # thêm được gì, mà đó đúng là nơi bộ này sinh ra để chạy.
+  no-dependencies:
+    # This package declares NO dependencies. That declaration needs a guard, because a stray
+    # `import requests` would not turn any test red -- it would only stop this package from
+    # running in the places it exists to run: an embedded device in a field, an agent's sandbox,
+    # a serverless function with a size cap.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Python chỉ dùng thư viện chuẩn
+      - name: Python uses only the standard library
         run: |
           if grep -rnE '^\s*(import|from)\s+(requests|httpx|aiohttp|numpy|pydantic)\b' python/orilife/; then
-            echo "::error::bộ Python đã lỡ phụ thuộc thư viện ngoài"; exit 1
+            echo "::error::Python package picked up an external dependency"; exit 1
           fi
-      - name: JavaScript không có dependencies
+      - name: JavaScript has no dependencies
         run: |
           python3 - <<'PY'
           import json
           pkg = json.load(open('javascript/package.json'))
           extra = {**pkg.get('dependencies', {}), **pkg.get('devDependencies', {})}
           if extra:
-              raise SystemExit(f"::error::bộ JavaScript đã lỡ phụ thuộc: {sorted(extra)}")
+              raise SystemExit(f"::error::JavaScript package picked up dependencies: {sorted(extra)}")
           PY

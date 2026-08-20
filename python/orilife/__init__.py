@@ -1,14 +1,15 @@
-"""Bộ công cụ OriLife — định danh cá thể bằng chính ảnh chụp nó.
+"""OriLife toolkit — identify an individual from a photograph of that individual.
 
-Hai nửa, cố ý tách rời:
+Two halves, deliberately kept apart:
 
-    from orilife import Client       # gọi API: định danh, đăng ký, đọc dòng thời gian
-    from orilife import verify       # kiểm chứng ĐỘC LẬP: không mạng, không phụ thuộc
+    from orilife import Client       # calls the API: identify, enrol, read timelines
+    from orilife import verify       # INDEPENDENT verification: no network, no dependencies
 
-Nửa thứ hai là nửa quan trọng. `Client` chỉ hỏi máy chủ và chép lại câu trả lời — dùng nó thì bạn
-đang tin OriLife. `verify` tính lại mã băm từ chính bản ghi, nên nó kiểm được lời khai của OriLife
-mà không cần OriLife có mặt. Một hệ truy xuất nguồn gốc chỉ đáng tin ở mức người ngoài kiểm được
-nó, nên nửa kiểm chứng không phụ thuộc bất cứ thứ gì ngoài thư viện chuẩn.
+The second half is the one that matters. `Client` only asks the server and repeats its answer —
+using it means trusting OriLife. `verify` recomputes hashes from the record itself, so it can
+check OriLife's claims without OriLife being present. A traceability system is only as trustworthy
+as an outsider's ability to check it, which is why the verification half depends on nothing beyond
+the standard library.
 """
 from . import verify
 from .client import DEFAULT_BASE_URL, Client

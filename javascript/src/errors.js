@@ -1,11 +1,12 @@
 /**
- * Lỗi có KIỂU — để ứng dụng phân biệt ba thứ mà một chuỗi lỗi trộn làm một: lỗi do người dùng,
- * lỗi do ứng dụng, lỗi do phía kia. Ba thứ đó phải xử theo ba cách khác hẳn nhau (hiện câu hướng
- * dẫn / đăng nhập lại / chờ rồi thử lại), nên gộp chúng vào một Error chung là đẩy việc phân loại
- * sang cho người viết ứng dụng, mỗi người tự đoán một kiểu.
+ * TYPED errors — so an app can tell apart three things a single error string blends into one:
+ * the user's mistake, the app's mistake, and the far side's mistake. Those three call for three
+ * completely different responses (show guidance / sign in again / wait and retry), so folding them
+ * into one Error pushes the sorting onto whoever writes the app, each of them guessing differently.
  *
- * Mọi lỗi mang `message` là câu tiếng Việt máy chủ đã viết sẵn cho người dùng đọc. Hiện thẳng câu
- * đó, đừng tự dịch mã lỗi thành câu của mình — máy chủ biết ngữ cảnh còn ứng dụng thì không.
+ * Every error carries a `message` the server already wrote for the end user to read (Vietnamese
+ * today, since that is who is standing in the orchard). Show that sentence as it is; do not
+ * translate status codes into wording of your own — the server knows the context, the app does not.
  */
 
 export class OriLifeError extends Error {
@@ -18,25 +19,26 @@ export class OriLifeError extends Error {
   }
 }
 
-/** Không nói chuyện được với máy chủ. Yêu cầu có thể CHƯA từng tới nơi — khác hẳn ServerError. */
+/** Could not talk to the server. The request may NEVER have arrived — unlike ServerError. */
 export class NetworkError extends OriLifeError {}
-/** 401 — chưa đăng nhập hoặc khoá hết hạn. Xin khoá mới rồi gọi lại. */
+/** 401 — not signed in, or the token expired. Get a new token and call again. */
 export class AuthError extends OriLifeError {}
-/** 403 — đã đăng nhập nhưng không có quyền. Xin khoá mới KHÔNG giúp. */
+/** 403 — signed in but not allowed. A new token does NOT help. */
 export class PermissionError extends OriLifeError {}
 /**
- * 404 — không có thứ đó. Đừng viết "cây này không tồn tại" lên màn hình: nhiều cửa cố ý trả 404
- * cho cả "không tồn tại" lẫn "của người khác", để người dò mã không đếm được vườn người ta.
+ * 404 — no such thing. Do not write "this tree does not exist" on the screen: many endpoints return
+ * 404 for both "does not exist" and "belongs to someone else", so that code scanners cannot count
+ * other people's orchards.
  */
 export class NotFoundError extends OriLifeError {}
-/** 413 — vượt trần. Nén nhỏ lại rồi gửi lại, đừng thử lại nguyên trạng. */
+/** 413 — over the cap. Compress it and send again; do not retry it unchanged. */
 export class TooLargeError extends OriLifeError {}
-/** 400/422 — thiếu trường, sai kiểu, hoặc không đạt luật. */
+/** 400/422 — a missing field, a wrong type, or a rule not met. */
 export class InvalidRequestError extends OriLifeError {}
-/** 5xx — yêu cầu đã tới nơi và phía kia hỏng. Thử lại được, giãn dần khoảng cách. */
+/** 5xx — the request did arrive and the far side broke. Retryable, with widening gaps. */
 export class ServerError extends OriLifeError {}
 
-/** 429 — gọi quá dày. CHỜ ĐÚNG `retryAfter` giây; thử lại ngay chỉ kéo dài thời gian bị chặn. */
+/** 429 — calling too fast. WAIT exactly `retryAfter` seconds; retrying now only extends the block. */
 export class RateLimitedError extends OriLifeError {
   constructor(message, opts = {}) {
     super(message, opts);
@@ -55,9 +57,10 @@ const BY_STATUS = {
 };
 
 /**
- * Câu cho người dùng, theo đúng thứ tự ưu tiên máy chủ dùng. `detail` là khuôn của tầng kiểm
- * tham số nên nó thường là cấu trúc, không phải câu — lấy nó hiện lên màn hình là cách nhanh
- * nhất để một chuỗi kỹ thuật rơi vào mắt nông dân.
+ * The sentence meant for the user, in the order of preference the server itself uses. `detail` is
+ * the shape produced by the parameter-validation layer, so it is usually a structure rather than a
+ * sentence — putting it on screen is the fastest way to land a technical string in front of a
+ * farmer.
  */
 function messageOf(payload, fallback) {
   if (payload && typeof payload === 'object') {
@@ -71,7 +74,7 @@ function messageOf(payload, fallback) {
 }
 
 export function fromResponse(status, payload, { path = '', headers = null } = {}) {
-  const message = messageOf(payload, `Máy chủ trả về mã ${status}.`);
+  const message = messageOf(payload, `The server returned status ${status}.`);
   const Cls = BY_STATUS[status] || (status >= 500 ? ServerError : OriLifeError);
   if (Cls === RateLimitedError) {
     let after = Number(headers && headers.get ? headers.get('Retry-After') : NaN);

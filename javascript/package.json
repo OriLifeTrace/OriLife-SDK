@@ -1,7 +1,7 @@
 {
   "name": "@orilife/sdk",
   "version": "1.0.0",
-  "description": "Định danh cá thể cây, quả và con vật bằng ảnh — bộ công cụ chính thức của OriLife",
+  "description": "Identify individual trees, fruits and animals from photographs — the official OriLife SDK",
   "type": "module",
   "main": "./src/index.js",
   "exports": {

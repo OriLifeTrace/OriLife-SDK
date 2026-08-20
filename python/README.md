@@ -1,22 +1,21 @@
-# OriLife SDK
+# OriLife SDK for Python
 
-Định danh **cá thể** — không phải "đây là cây sầu riêng", mà là "đây là **cây số 47** của vườn này".
-Bằng chính ảnh chụp nó. Không tem, không mã QR, không thẻ gắn lên vật.
+Identify an **individual** — not "this is a durian tree" but "this is **tree 47** in this orchard"
+— from photographs alone. No tags, no QR codes, nothing attached to the object.
 
-Bộ này là thứ bạn cần để viết một ứng dụng nói chuyện với OriLife, và cũng là thứ người khác cần
-để **kiểm chứng** những gì OriLife nói mà không phải tin OriLife.
+This package is what you need to write an application that talks to OriLife, and also what anyone
+else needs to **check** what OriLife says without having to trust OriLife.
 
 ```
 Base URL   https://api.orilife.io
-Tài liệu   https://api.orilife.io/docs   ·   https://api.orilife.io/openapi.json
-Cho máy    https://api.orilife.io/.well-known/orilife.json   ·   https://api.orilife.io/llms.txt
+API docs   https://api.orilife.io/docs   ·   https://api.orilife.io/openapi.json
 ```
+
+Python 3.9 or newer. No dependencies.
 
 ---
 
-## Ba mươi giây
-
-**Python** — không phụ thuộc thư viện nào, Python 3.9 trở lên:
+## Thirty seconds
 
 ```bash
 pip install orilife
@@ -26,235 +25,314 @@ pip install orilife
 from orilife import Client
 
 client = Client()
-client.signup("vuon_cua_toi", "vuon.sau.rieng.2026")
+client.login("my_orchard", "durian.orchard.2026")
 
-# Không phải hỏi người dùng đang chụp cây, quả hay con vật — máy tự nhận.
-out = client.identify_auto(["anh.jpg"], lat=10.762, lon=106.660)
-print(out["kind"], out["result"]["decision"])
+# Recognise a tree again. Several photos from several angles beat a single photo.
+out = client.identify_tree(["photo.jpg"], lat=10.762, lon=106.660)
+print(out["decision"], out.get("confidence"))
 ```
 
-**JavaScript** — trình duyệt, Node 18+, Deno, Bun, Cloudflare Workers:
+The same call without this package, because the API is plain HTTP:
 
 ```bash
-npm install @orilife/sdk
-```
-
-```js
-import { Client } from '@orilife/sdk';
-
-const client = new Client();
-await client.login('vuon_cua_toi', 'vuon.sau.rieng.2026');
-const out = await client.identifyAuto([file], { lat: 10.762, lon: 106.660 });
-```
-
-**Không dùng bộ nào cả** — API là HTTP thuần:
-
-```bash
-curl -X POST https://api.orilife.io/api/identify/auto \
+curl -X POST https://api.orilife.io/api/identify \
   -H "Authorization: Bearer $TOKEN" \
-  -F 'files=@anh.jpg' -F 'lat=10.762' -F 'lon=106.660'
+  -F 'files=@photo.jpg' -F 'lat=10.762' -F 'lon=106.660'
 ```
 
 ---
 
-## Hai nửa, và nửa thứ hai mới là nửa quan trọng
+## Two halves, and the second one is the one that matters
 
 ```python
-from orilife import Client   # gọi API  — bạn đang TIN OriLife
-from orilife import verify   # kiểm chứng — bạn KHÔNG phải tin ai
+from orilife import Client   # calls the API   — you are TRUSTING OriLife
+from orilife import verify   # verification    — you trust nobody
 ```
 
-`Client` hỏi máy chủ rồi chép lại câu trả lời. Nếu cách duy nhất để biết một bản ghi có thật là
-hỏi chính máy chủ đã tạo ra nó thì hệ đó không chứng minh gì hết — nó đang lặp lại lời khai của
-chính mình.
+`Client` asks the server and repeats its answer. If the only way to know whether a record is real
+is to ask the very server that produced it, the system proves nothing — it is repeating its own
+claim.
 
-`verify` là đường thoát khỏi vòng lặp đó. Nó tính lại mã băm từ chính bản ghi, đối chiếu với con
-số đã neo lên chuỗi Cardano. Không mạng, không phụ thuộc, không cần OriLife có mặt:
+`verify` is the way out of that loop. It recomputes the hash from the record itself and compares
+it with the number anchored on Cardano. No network, no dependencies, no OriLife in the room:
 
 ```python
+import json
 from orilife import verify
 
-record = json.load(open("ban-ghi-tai-ve.json"))   # tải từ bất kỳ đâu
-onchain = "3f0a…"                                  # đọc trên trình duyệt khối
+record = json.load(open("downloaded-record.json"))   # from anywhere
+onchain = "3f0a…"                                    # read off a block explorer
 
-verify.verify_record(record, onchain)   # True nghĩa là chưa ai đụng vào bản ghi này
+verify.verify_record(record, onchain)   # True means nobody has touched this record
 ```
 
-Cùng phép toán ấy chạy trong trình duyệt:
-
-```js
-import * as verify from '@orilife/sdk/verify';
-verify.verifyRecord(record, onchain);
-```
-
-Hai bản cài đặt độc lập, cùng khớp một bộ vector sinh từ chính mã đang chạy trên máy chủ. Chi tiết
-và cách tự làm lại bằng tay: [VERIFY.md](VERIFY.md).
+The JavaScript package computes the same numbers, and both are checked against one set of vectors
+in `tests/vectors.json`. Two independent implementations agreeing on one set of vectors is far
+stronger evidence than one implementation checking itself. Details, including how to redo the
+computation by hand: [VERIFY.md](../VERIFY.md).
 
 ---
 
-## Nhận diện những gì
+## What can be recognised
 
-| Loại | Đăng ký | Nhận diện lại | Tình trạng |
-|---|---|---|---|
-| Cây | `POST /api/enroll` | `POST /api/identify` | Đang chạy ngoài vườn |
-| Quả | `POST /api/fruit/enroll` | `POST /api/fruit/identify` | Đang chạy ngoài vườn |
-| Con vật | `POST /api/animal/enroll` | `POST /api/animal/identify` | Chạy được; cửa còn đòi khai `species` và `farm_id` |
-| Hoa, sản phẩm chế biến | — | — | **Chưa có tuyến nào** |
+| Subject | Enrol | Recognise again |
+|---|---|---|
+| Tree | `enroll_tree()` | `identify_tree()` · `identify_tree_video()` |
+| Fruit | `enroll_fruit()` · `add_fruit_view()` | `identify_fruit()` · `lookup_fruit()` |
+| Animal | `enroll_animal()` | `identify_animal()` · `scan_animal()` |
 
-Bảng này không chép tay ở đây mà cũng nằm ở `/.well-known/orilife.json`, sinh từ bảng đường dẫn
-thật của máy chủ. Danh sách chép tay thì đúng đúng một ngày.
+`identify_auto()` is the combined door: send photos, the server works out what kind of subject it
+is looking at and identifies the individual. Your application never has to ask the user what they
+are photographing — pushing the sorting work onto a person because the machine cannot do it is
+exactly the shape OriLife exists to remove.
 
-`POST /api/identify/auto` là cửa gộp: gửi ảnh, máy tự nhận loại rồi định danh luôn. Ứng dụng
-**không phải hỏi người dùng đang chụp cái gì** — đẩy việc phân loại sang cho con người vì máy chưa
-làm chính là hình dạng OriLife sinh ra để phá.
-
----
-
-## Hai lối vào
-
-**Lối công khai — không cần tài khoản.** Cho ứng dụng người mua: khách chụp một quả đang bày, hoặc
-quét mã trên phiếu, và tra ra nguồn gốc.
+**Not every server serves every endpoint.** `identify_auto()`, `describe()` and `/llms.txt` exist
+on servers that declare them and answer 404 elsewhere; there is no silent fallback to another
+endpoint, because quietly changing what an answer means is worse than an error. Ask first:
 
 ```python
-Client().lookup_fruit("qua.jpg")             # ảnh một quả → ứng viên công khai
-Client().resolve("ORI-w3gv5j2-A7K9PQ2M")     # tra một mã
-Client().species_catalog()                   # danh mục loài
-Client().health()                            # máy chủ làm được gì hôm nay
+if client.supports("/api/identify/auto"):
+    out = client.identify_auto(["photo.jpg"], lat=10.762, lon=106.660)
+else:
+    out = client.identify_tree(["photo.jpg"], lat=10.762, lon=106.660)
 ```
 
-**Lối chủ vườn — cần khoá.** Đăng ký cây, nhận diện lại, ghi nhật ký chăm sóc, dựng 3D, neo bằng
-chứng. Mỗi tài khoản chỉ so khớp **trong vườn của chính mình** — vừa là riêng tư, vừa là độ chính
-xác, vì hai cây cùng loài ở hai tỉnh không có cơ hội lẫn vào nhau.
-
-Luật tài khoản, đọc trước khi gọi dòng đầu tiên: tên đăng nhập 3–32 ký tự, chỉ **chữ thường, chữ
-số, dấu chấm và gạch dưới** — không có gạch nối. Mật khẩu tối thiểu 10 ký tự, ít nhất hai nhóm ký
-tự, không nằm trong danh sách mật khẩu phổ biến. Khoá sống 12 giờ.
+`supports()` reads the server's endpoint listing once per client and remembers it, so calling it
+in a loop costs one request in total.
 
 ---
 
-## Ba điều nên biết trước khi viết dòng đầu tiên
+## Two ways in
 
-**Đọc năng lực, đừng viết cứng.** `GET /api/health` trả `features` sinh từ bảng đường dẫn thật.
-Ứng dụng đọc nó rồi mới quyết định hiện màn hình nào — máy chủ thêm năng lực là dùng được ngay,
-không cần bản cập nhật.
+**The public way — no account.** For buyer-facing applications: someone photographs a fruit on a
+stall, or scans the code on a slip, and reads where it came from.
 
-**"Chưa chắc" là một kết quả, không phải lỗi.** Hệ trả `uncertain` thay vì đoán bừa. Đừng thử lại,
-đừng hiện vòng xoay — hãy hỏi người dùng, hoặc mời chụp thêm một góc.
+```python
+Client().lookup_fruit("fruit.jpg")            # one photo → public candidates
+Client().resolve("ORI-w3gv5j2-A7K9PQ2M")      # look up a code
+Client().tree_by_code("ORI-w3gv5j2-A7K9PQ2M") # provenance of one tree
+Client().species_catalog()                    # the species this server knows
+Client().health()                             # what the server can do today
+```
 
-**`unknown` khi tra mã không kèm lý do, và cố ý như vậy.** Nếu "mã sai" trả lời khác "mã có thật
-nhưng riêng tư" thì người dò mã sẽ đếm được vườn người khác. Đừng suy ra sự tồn tại từ chỗ khác
-biệt — không có chỗ khác biệt nào.
+**The grower's way — needs a token.** Enrol subjects, recognise them again, keep a care log,
+anchor evidence. Each account only ever matches **within its own farm** — that is privacy and
+accuracy at once, because two trees of the same species in two provinces never get the chance to
+be confused.
+
+Account rules, worth reading before the first call: username 3–32 characters, **lowercase
+letters, digits, dots and underscores** only — no hyphens. Password at least 10 characters, at
+least two character classes, not in the common-password list. A token lives 12 hours.
 
 ---
 
-## Lỗi
+## Everything the client exposes
 
-Mỗi mã trạng thái là một lớp lỗi riêng, vì ứng dụng phải xử chúng theo những cách khác hẳn nhau.
+**Session**
 
-| Mã | Lớp | Ứng dụng nên làm |
+| Method | Endpoint |
+|---|---|
+| `signup(username, password)` | `POST /api/signup` |
+| `login(username, password)` | `POST /api/login` |
+| `me()` | `GET /api/me` |
+| `logout()` | `POST /api/logout` |
+| `logout_all()` | `POST /api/logout-all` — ends every session on every device |
+
+**Open without a token**
+
+| Method | Endpoint |
+|---|---|
+| `health()` | `GET /api/health` |
+| `endpoints()` | `GET /api` |
+| `supports(path)` | reads `GET /api` once, then answers from memory |
+| `describe()` | `GET /.well-known/orilife.json` |
+| `species_catalog()` | `GET /api/species/catalog` |
+| `resolve(code)` | `GET /api/resolve/{code}` |
+| `tree_by_code(code)` | `GET /api/tree_by_code/{code}` |
+| `lookup_fruit(image)` | `POST /api/fruit/lookup` |
+
+**Recognising**
+
+| Method | Endpoint |
+|---|---|
+| `identify_auto(images, lat=, lon=, species=, farm_id=)` | `POST /api/identify/auto` |
+| `identify_tree(images, lat=, lon=, last_tree=)` | `POST /api/identify` |
+| `identify_tree_video(video, lat=, lon=)` | `POST /api/identify/video` |
+| `identify_fruit(image, tree_id=)` | `POST /api/fruit/identify` |
+| `identify_animal(image, species=, farm_id=)` | `POST /api/animal/identify` |
+| `scan_animal(image, farm_id=, species=)` | `POST /api/animal/scan` |
+| `identify_kind(image)` | `POST /api/kind` |
+
+**Enrolling**
+
+| Method | Endpoint |
+|---|---|
+| `enroll_tree(images, name=, lat=, lon=, farm_id=, species=)` | `POST /api/enroll` |
+| `verify_add(tree_id, images)` | `POST /api/verify_add` |
+| `list_trees(farm_id=)` | `GET /api/trees` |
+| `enroll_fruit(images, tree_id=, name=, bbox=)` | `POST /api/fruit/enroll` |
+| `add_fruit_view(fruit_id, images)` | `POST /api/fruit/add_view` |
+| `enroll_animal(images, species=, farm_id=, name=, owner_did=)` | `POST /api/animal/enroll` |
+| `list_animals(farm_id=, species=, limit=, offset=)` | `GET /api/animal/list` |
+
+The fruit endpoints take **one photo per call**: enrol with the first angle, then call
+`add_fruit_view()` once per further angle. Passing more than one image raises `ValueError` here
+rather than letting the extra photos be dropped in silence. `bbox` is `(x, y, w, h)` or a dict
+with those keys.
+
+**Farms**
+
+| Method | Endpoint |
+|---|---|
+| `create_farm(name, lat=, lon=)` | `POST /api/farm` |
+| `list_farms()` | `GET /api/farms` |
+| `get_farm(farm_id)` | `GET /api/farm/{farm_id}` |
+| `update_farm(farm_id, **fields)` | `POST /api/farm/{farm_id}/update` |
+| `delete_farm(farm_id)` | `DELETE /api/farm/{farm_id}` |
+
+Deleting a farm does not delete its trees: they lose their `farm_id` and stay traceable on their
+own. `update_farm()` accepts `name`, `kind`, `boundary_json`, `center_json`, `boundary_method`,
+`boundary_acc_m`, `note`; lists and dicts are JSON encoded on the way out.
+
+**Saying whether the answer was right**
+
+| Method | Endpoint |
+|---|---|
+| `submit_verdict(query_id, verdict, correct_tree_id=)` | `POST /api/identify_verdict` |
+| `submit_fruit_verdict(query_id, verdict, correct_fruit_id=)` | `POST /api/fruit/identify_verdict` |
+| `submit_animal_verdict(query_id, verdict, correct_did=)` | `POST /api/animal/identify_verdict` |
+
+`query_id` comes from the identification answer and joins the two together. `verdict` is
+`correct`, `wrong` or `other`; animals also accept `unknown_ok`, meaning the individual was never
+enrolled and the server was right to say it did not know.
+
+**Evidence and history**
+
+| Method | Endpoint |
+|---|---|
+| `capture_plan(entity_type, entity_id)` | `GET /api/capture/plan` — what is missing, what to photograph next |
+| `provenance(tree_id)` | `GET /api/provenance/{tree_id}` |
+| `timeline(entity_type, entity_id)` | `GET /api/{entity_type}/{entity_id}/timeline` |
+| `add_event(entity_type, entity_id, kind, data=None)` | `POST /api/{entity_type}/{entity_id}/event` |
+| `anchor_event(entity_type, entity_id, event_id)` | `POST /api/{entity_type}/{entity_id}/event/{event_id}/anchor` |
+| `proof(entity_type, entity_id, event_id)` | `GET /api/{entity_type}/{entity_id}/proof/{event_id}` |
+
+`entity_type` is `tree`, `fruit`, `farm`, `animal` or `plot`. A subject that was never enrolled
+cannot have a timeline: writing the first event would otherwise be a way to claim ownership of
+somebody else's tree. Anchoring costs money on chain and is the owner's decision — the server
+suggests it with `suggest_anchor`, it never does it by itself.
+
+Anything not wrapped in a method is one line away, and the wrapping adds nothing you lose by
+skipping it:
+
+```python
+client.request("POST", "/api/tree/t-1/event", json_body={"kind": "harvest", "gps": [10.5, 106.5]})
+```
+
+---
+
+## Three things to know before the first line
+
+**Read the capabilities, do not hard-code them.** `health()` returns `features`, generated from
+the server's real routing table. Read it and then decide which screens to show — the server gains
+a capability and your application can use it without an update.
+
+**"Not sure" is a result, not an error.** The system answers `uncertain` instead of guessing.
+Do not retry, do not show a spinner — ask the user, or invite one more angle.
+
+**`unknown` from a code lookup carries no reason, deliberately.** If "wrong code" answered
+differently from "real but private code", someone walking the code space could count another
+person's orchard. There is no difference to read.
+
+---
+
+## Errors
+
+Every status code is its own class, because an application has to handle them in different ways.
+
+| Status | Class | What to do |
 |---|---|---|
-| — | `NetworkError` | Yêu cầu có thể **chưa tới nơi**. Cửa đọc thì gọi lại; cửa ghi thì hỏi lại trạng thái trước |
-| 400 · 422 | `InvalidRequestError` | Thiếu trường hoặc không đạt luật. Hiện `message` cho người dùng |
-| 401 | `AuthError` | Khoá hết hạn. Đăng nhập lại rồi gọi lại |
-| 403 | `PermissionError` | Không có quyền. Xin khoá mới **không** giúp |
-| 404 | `NotFoundError` | Đừng viết "không tồn tại" lên màn hình — xem mục `unknown` ở trên |
-| 413 | `TooLargeError` | Nén nhỏ lại rồi gửi lại, đừng thử lại nguyên trạng |
-| 429 | `RateLimitedError` | Chờ đúng `retry_after` giây. Bộ này tự chờ hộ |
-| 5xx | `ServerError` | Thử lại giãn dần — nhưng chỉ với cửa đọc |
+| — | `NetworkError` | The request may **never have arrived**. Read endpoints: call again. Write endpoints: ask for the state first |
+| 400 · 422 | `InvalidRequestError` | Missing field or a rule not met. Show `message` to the user |
+| 401 | `AuthError` | Token expired. Log in again and repeat the call |
+| 403 | `PermissionError_` | Not allowed. A new token does **not** help |
+| 404 | `NotFoundError` | Do not print "does not exist" — see `unknown` above |
+| 413 | `TooLargeError` | Compress and resend; do not retry unchanged |
+| 429 | `RateLimitedError` | Wait `retry_after` seconds. This client already waits for you |
+| 5xx | `ServerError` | Retry with a growing gap — read endpoints only |
 
-Câu trong `message` là câu máy chủ đã viết sẵn cho người dùng đọc. **Hiện thẳng câu đó**, đừng tự
-dịch mã lỗi thành câu của mình: máy chủ biết ngữ cảnh, ứng dụng thì không.
+```python
+from orilife import Client, AuthError, RateLimitedError
+
+try:
+    out = client.identify_tree(["photo.jpg"])
+except AuthError:
+    client.login(user, password)
+except RateLimitedError as e:
+    print(f"try again in {e.retry_after}s")
+```
+
+`message` is the sentence the server already wrote for the end user. **Show that sentence.** Do
+not turn a status code into a sentence of your own: the server knows the context, your application
+does not.
+
+Write endpoints are never retried automatically — a resend may create a second record. Read
+endpoints are retried on 5xx and on network failures, and a 429 is always waited out for exactly
+as long as the server asked.
 
 ---
 
-## Giới hạn
+## Limits
 
 | | |
 |---|---|
-| Một tệp | 20 MB |
-| Một lô ảnh | 64 MB |
+| One file | 20 MB |
+| One batch of photos | 64 MB |
 | Video | 80 MB |
-| Khoá sống | 12 giờ |
-| Quá dày | `429` kèm header `Retry-After` |
+| Token lifetime | 12 hours |
+| Too often | `429` with a `Retry-After` header |
 
-Trần được đếm ngay khi byte đang lên, nên `413` về **trước khi** tải xong — không phải chờ hết
-băng thông rồi mới biết là hỏng.
-
----
-
-## Trình duyệt, bot và tác tử
-
-CORS mở cho mọi origin, kèm **không** gửi cookie khác origin. Nghĩa là trang web ở bất kỳ đâu cũng
-gọi được, mà không trang nào mượn được phiên đăng nhập của người dùng — khoá phải đi bằng header
-`Authorization: Bearer`, và cả lớp CSRF biến mất.
-
-Cho thứ đọc bằng máy:
-
-| | |
-|---|---|
-| `GET /.well-known/orilife.json` | Bản khai dịch vụ: cửa nào không cần khoá, trần bao nhiêu, loại nào có tuyến |
-| `GET /llms.txt` | Bản đồ một trang cho tác tử ngôn ngữ |
-| `GET /openapi.json` | Đặc tả từng cửa, sinh mã client được |
+The cap is counted while the bytes are still arriving, so `413` comes back **before** the upload
+finishes — you do not spend the whole upload to learn it failed.
 
 ---
 
-## Trong kho này có gì, và cố ý không có gì
-
-**Có:** khách gọi API (Python, JavaScript), bộ kiểm chứng độc lập, hợp đồng API, ví dụ chạy được.
-
-**Không có:** phần nhận diện. Cách máy quyết định hai tấm ảnh là cùng một cá thể nằm trên máy chủ
-và không rời khỏi đó.
-
-Ranh giới ấy không phải mới dựng cho kho này — nó đã có sẵn ở tầng phản hồi của máy chủ: điểm số
-chi tiết và mọi tham số nội bộ của phép so khớp đều **không đi ra ngoài cửa API**. Ứng dụng nhận
-`decision` và một mức tin cậy thô, không nhận nội tạng. Hai lý do, và lý do thứ hai
-quan trọng hơn lý do thứ nhất: nội tạng lộ ra thì đối thủ chép được, mà kẻ gian còn biến hệ thành
-máy dò để thử đến khi lọt.
-
-Nói cách khác: mọi thứ **phía ngoài** ranh giới đó thì mở, gồm cả toàn bộ đường kiểm chứng — thứ
-duy nhất bạn cần để bắt OriLife nói dối. Phần **bên trong** thì đóng.
-
----
-
-## Chạy bài kiểm
+## Running the tests
 
 ```bash
-cd python && python -m pytest tests/ -q      # 34 bài, chạy được ngoại tuyến
-cd javascript && node --test test/           # 23 bài, không cài gì thêm
+cd python && python -m pytest -q      # 67 tests, all offline
 ```
 
-Bộ kiểm chứng của hai ngôn ngữ đối chiếu với **cùng một** bộ vector sinh từ mã đang chạy trên máy
-chủ (`python/tests/vectors.json`). Hai bản cài đặt độc lập cùng khớp một bộ vector là bằng chứng
-mạnh hơn hẳn một bản tự kiểm lấy mình.
+No network, no fixtures to download: the client tests run against a fake server built from the
+standard library, and the verifier tests run against `tests/vectors.json`.
 
 ---
 
-## Đọc tiếp
+## What is in here, and what is deliberately not
 
-- [CONTRACT.md](CONTRACT.md) — hợp đồng API đầy đủ: từng cửa, từng trường, từng khuôn lỗi
-- [VERIFY.md](VERIFY.md) — kiểm chứng độc lập, kể cả cách làm lại bằng tay không cần bộ này
-- [SECURITY.md](SECURITY.md) — giữ khoá, và những thứ không bao giờ được nhúng vào ứng dụng
-- [examples/](examples/) — ví dụ chạy được
+**Here:** the API client, the independent verifier, the API contract, working examples.
 
----
+**Not here:** the recognition itself. How the machine decides that two photographs show the same
+individual stays on the server.
 
-## In English
+That boundary is not new to this repository — it already exists at the server's response layer:
+detailed scores and every internal parameter of the comparison **never leave the API**. An
+application receives `decision` and a coarse confidence level, not the internals. Two reasons, and
+the second matters more than the first: exposed internals can be copied by a competitor, and worse,
+they turn the system into a probe that an attacker can tune against until something slips through.
 
-OriLife identifies **individuals** — not "this is a durian tree" but "this is **tree 47** in this
-orchard" — from photographs alone. No tags, no QR codes, nothing attached to the object.
-
-This repository holds the official client SDKs (Python, JavaScript), the public API contract, and
-an **independent verifier**. The verifier is the part that matters: it recomputes record hashes
-from the record itself and checks them against what was anchored on Cardano, so a third party can
-confirm OriLife's claims without trusting — or even contacting — OriLife. It has no dependencies
-and needs no network.
-
-The recognition engine is not here and will not be. Everything outside the API response boundary
-is open, including the entire verification path; everything inside stays closed.
-
-API docs (Vietnamese): <https://api.orilife.io/docs>. Machine-readable service descriptor:
-<https://api.orilife.io/.well-known/orilife.json>.
+Everything **outside** that boundary is open, including the whole verification path — the one
+thing you need to catch OriLife lying. Everything inside stays closed.
 
 ---
 
-Apache-2.0. Bằng chứng neo trên Cardano, dữ liệu lưu phân tán trên LampNet.
+## Read next
+
+- [CONTRACT.md](../CONTRACT.md) — the full API contract: every endpoint, every field, every error shape
+- [VERIFY.md](../VERIFY.md) — independent verification, including how to redo it by hand without this package
+- [SECURITY.md](../SECURITY.md) — handling tokens, and what must never be embedded in an application
+- [examples/](../examples/) — working examples
+
+---
+
+Apache-2.0. Evidence anchored on Cardano, data stored distributed on LampNet.
