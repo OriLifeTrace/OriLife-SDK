@@ -9,16 +9,13 @@
  * Run it with: node --test  (nothing to install)
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
 import { blake2b, sha3_256 } from '../src/hash.js';
 import * as verify from '../src/verify.js';
+import { load } from './_contract.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const V = JSON.parse(readFileSync(join(HERE, '..', '..', 'python', 'tests', 'vectors.json'), 'utf8'));
+const V = load('vectors.json');
 
 test('SHA3-256 matches the standard FIPS 202 vectors', () => {
   assert.equal(sha3_256(''), 'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a');
@@ -96,4 +93,19 @@ test('the summary separates a record missing fields from a record that was alter
   const short = verify.summarize({ v: 2, code: 'ORI-0000000-AAAAAAAA' }, '0'.repeat(64));
   assert.ok(short.missingFields.length > 0);
   assert.equal(short.hashMatches, false);
+});
+
+test('bộ kiểm chứng không chạm tới mạng', () => {
+  // Phần ĐỌC phải chạy được khi mất mạng — đó là điều kiện vận hành, không phải ca hiếm. Một
+  // người mua đứng giữa vườn, sóng chập chờn, vẫn phải kiểm được tấm phiếu trên tay.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = () => { throw new Error('bộ kiểm chứng vừa gọi ra mạng — nó phải chạy ngoại tuyến'); };
+  try {
+    assert.ok(verify.entityCode('cay-so-47', [11.5449, 107.4123]).startsWith('ORI-'));
+    assert.equal(verify.recordHash(V.record), V.record_hash_sha3_256);
+    assert.equal(verify.verifyRecord(V.record, V.record_hash_sha3_256), true);
+    assert.equal(verify.summarize(V.record, V.record_hash_sha3_256).hashMatches, true);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

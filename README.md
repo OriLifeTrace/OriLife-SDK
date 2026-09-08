@@ -271,6 +271,26 @@ token **must** travel in the `Authorization: Bearer` header.
 **Here:** API clients (Python, JavaScript), the independent verifier, the API contract, runnable
 examples.
 
+```
+contract/            one source of truth, machine-readable — everything else is derived from it
+  methods.json         which path, which field name, which file field, what is safe to retry
+  conformance.json     shared test cases: what must go on the wire for a given call
+  vectors.json         shared verification vectors: codes, canonical JSON, record hashes
+  METHODS.md           human-readable method map — GENERATED, do not edit
+tools/
+  generate.py          contract -> client code in both languages   (offline; --check in CI)
+  check_server_drift.py  contract vs the live /openapi.json        (needs network; three states)
+python/orilife/      transport, errors, verifier + _generated.py
+javascript/src/      transport, errors, verifier + generated.js
+```
+
+Both language packages are **generated from `contract/methods.json`**, and both test suites run
+`contract/conformance.json`. Endpoint methods are not typed twice, and a divergence between the two
+languages turns a suite red instead of surfacing months later in an orchard. Why that matters, with
+the three real divergences that motivated it: [contract/README.md](contract/README.md).
+
+Porting to a platform this repository does not ship: [PORTING.md](PORTING.md).
+
 **Not here:** the recognition engine. How the server decides that two photographs show the same
 individual stays on the server.
 
@@ -327,12 +347,23 @@ the server. Full walkthrough, including how to redo every step by hand with no S
 
 ```bash
 cd python && python -m pytest tests/ -q      # runs offline
-cd javascript && node --test test/           # no install step
+cd javascript && node --test                 # no install step
+
+python3 tools/generate.py --check            # generated code still matches the contract (offline)
+python3 tools/check_server_drift.py          # contract still matches the live server (needs network)
 ```
 
-Both suites check against the **same** vector file (`python/tests/vectors.json`). Two independent
-implementations matching one set of vectors is far stronger evidence than one implementation
-grading its own homework: a bug has to appear identically in both languages to get through.
+Both suites check against the **same** files in `contract/`: the vectors for the verifier, the
+conformance cases for the client. Two independent implementations matching one shared set is far
+stronger evidence than one implementation grading its own homework — a bug now has to appear
+identically in both languages to get through.
+
+The last two commands answer different questions and must not be conflated. `generate.py --check`
+asks *does the code match the contract*; it runs offline and is simply red or green.
+`check_server_drift.py` asks *does the contract match the running server*; it needs a network and
+therefore reports **three** states — match, drift, and **could not measure**. The third is louder
+than the second, because a check that returns "fine" exactly when it measured nothing is not saying
+*fine*, it is saying *I do not know* in the voice of *fine*.
 
 ---
 
@@ -357,6 +388,8 @@ Stated plainly so you do not go looking:
 ## Read next
 
 - [CONTRACT.md](CONTRACT.md) — the full API contract: every endpoint, every field, every error shape
+- [contract/METHODS.md](contract/METHODS.md) — the method map, generated from `contract/methods.json`
+- [PORTING.md](PORTING.md) — writing a conforming client for a platform this repository does not ship
 - [VERIFY.md](VERIFY.md) — independent verification, including the by-hand procedure
 - [SECURITY.md](SECURITY.md) — token handling, and what must never be shipped inside an app
 - [examples/](examples/) — runnable examples: `identify.py`, `verify.py`, `agent.py`, `browser.html`

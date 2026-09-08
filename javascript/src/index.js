@@ -10,7 +10,7 @@
  * it means you are trusting OriLife. `verify` recomputes hashes from the record itself, so it can
  * check what OriLife claims without OriLife being present.
  */
-export { Client, DEFAULT_BASE_URL } from './client.js';
+export { Client, CONTRACT_VERSION, DEFAULT_BASE_URL } from './client.js';
 export {
   AuthError, InvalidRequestError, NetworkError, NotFoundError, OriLifeError,
   PermissionError, RateLimitedError, ServerError, TooLargeError,

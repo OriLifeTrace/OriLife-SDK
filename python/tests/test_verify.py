@@ -9,17 +9,16 @@ Runs offline. No network, no dependencies, no server needed.
 """
 from __future__ import annotations
 
-import json
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from _contract import load  # noqa: E402
 from orilife import verify  # noqa: E402
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-with open(os.path.join(HERE, "vectors.json"), encoding="utf-8") as fh:
-    V = json.load(fh)
+V = load("vectors.json")
 
 
 def test_codes_match_the_production_generator():
@@ -123,3 +122,24 @@ def test_content_id_helper_refuses_to_guess():
 def test_sha256_helper_is_the_plain_one():
     import hashlib
     assert verify.sha256_of(b"abc") == hashlib.sha256(b"abc").hexdigest()
+
+
+def test_the_verifier_touches_no_network(monkeypatch):
+    """Phần ĐỌC phải chạy được khi mất mạng — đó là điều kiện vận hành, không phải ca hiếm.
+
+    Một người mua đứng giữa vườn, sóng chập chờn, vẫn phải kiểm được tấm phiếu trên tay. Nên chỗ
+    này chặn TẬN gốc: cấm mở socket, rồi chạy đúng những hàm mà người kiểm sẽ gọi. Ném ở đây nghĩa
+    là bộ kiểm chứng đã lén gọi ra ngoài.
+    """
+    import socket
+
+    def _forbidden(*a, **kw):
+        raise AssertionError("bộ kiểm chứng vừa mở kết nối mạng — nó phải chạy ngoại tuyến")
+
+    monkeypatch.setattr(socket, "socket", _forbidden)
+    monkeypatch.setattr(socket, "create_connection", _forbidden)
+
+    assert verify.entity_code("cay-so-47", [11.5449, 107.4123]).startswith("ORI-")
+    assert verify.record_hash(V["record"]) == V["record_hash_sha3_256"]
+    assert verify.verify_record(V["record"], V["record_hash_sha3_256"]) is True
+    assert verify.summarize(V["record"], V["record_hash_sha3_256"])["hash_matches"] is True

@@ -12,7 +12,7 @@ as an outsider's ability to check it, which is why the verification half depends
 the standard library.
 """
 from . import verify
-from .client import DEFAULT_BASE_URL, Client
+from .client import CONTRACT_VERSION, DEFAULT_BASE_URL, Client
 from .errors import (
     AuthError,
     InvalidRequestError,
@@ -27,7 +27,7 @@ from .errors import (
 __version__ = "1.0.0"
 
 __all__ = [
-    "Client", "DEFAULT_BASE_URL", "verify", "__version__",
+    "Client", "DEFAULT_BASE_URL", "CONTRACT_VERSION", "verify", "__version__",
     "OriLifeError", "NetworkError", "AuthError", "NotFoundError",
     "TooLargeError", "InvalidRequestError", "RateLimitedError", "ServerError",
 ]

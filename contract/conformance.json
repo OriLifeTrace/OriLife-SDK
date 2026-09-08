@@ -1,0 +1,536 @@
+{
+  "about": [
+    "Bộ ca kiểm DÙNG CHUNG cho mọi bản cài SDK. Mỗi ca nói: gọi hàm này với tham số này thì đúng",
+    "cái gì phải đi lên dây — đường nào, tham số truy vấn nào, trường biểu mẫu nào (kể cả giá trị",
+    "đã mã hoá), tệp nào dưới tên trường nào.",
+    "",
+    "Đây là thứ DUY NHẤT bắt được lệch giữa các ngôn ngữ. Bộ kiểm riêng của mỗi bên chỉ chứng minh",
+    "bên đó tự nhất quán với chính nó; hai bên tự nhất quán mà lệch nhau vẫn xanh cả hai. Ba lỗi có",
+    "thật đã đi qua đúng khe đó — xem đầu tệp `python/orilife/_wire.py`.",
+    "",
+    "Ranh giới đo: các ca này chốt ở chỗ hàm gọi ra `request()`, tức là phần ÁNH XẠ (đường, tên",
+    "trường, cách mã hoá giá trị). Tầng vận chuyển bên dưới (dựng multipart, chờ 429, phân loại lỗi)",
+    "do bộ kiểm riêng của từng ngôn ngữ giữ. Nói vậy để không ai đọc màu xanh ở đây thành 'đã kiểm",
+    "hết'.",
+    "",
+    "Tệp gửi lên viết là {\"$file\": \"<tên>\"}; mỗi bản cài tự dựng thành kiểu tệp của ngôn ngữ mình.",
+    "Còn {\"$single_file\": \"<tên>\"} là MỘT tệp lẻ KHÔNG bọc trong danh sách, dựng theo lối tự nhiên",
+    "nhất của ngôn ngữ đó — Python là chuỗi đường dẫn, JavaScript là một đối tượng tệp. Hai lối dựng",
+    "khác nhau là CỐ Ý: mỗi ngôn ngữ hỏng theo một kiểu riêng ở đúng chỗ này (Python duyệt chuỗi",
+    "thành từng ký tự, JavaScript gọi `.map` trên thứ không phải mảng), và ca này phải chạm được cả",
+    "hai. Ca dựng đầu vào giống nhau ở đây sẽ xanh dưới cả hai đột biến, tức là không kiểm gì.",
+    "",
+    "Giá trị trong `fields`/`query` viết dưới dạng CHUỖI vì đó là dạng chúng đi lên dây."
+  ],
+  "cases": [
+    {
+      "name": "signup gửi mật khẩu trong thân JSON, không bao giờ trong chuỗi truy vấn",
+      "method": "signup",
+      "args": { "username": "my_orchard", "password": "durian.orchard.2026" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/signup",
+        "json": { "username": "my_orchard", "password": "durian.orchard.2026" }
+      },
+      "after": { "token": "tok" }
+    },
+    {
+      "name": "login giữ lại thẻ máy chủ vừa cấp",
+      "method": "login",
+      "args": { "username": "my_orchard", "password": "durian.orchard.2026" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/login",
+        "json": { "username": "my_orchard", "password": "durian.orchard.2026" }
+      },
+      "after": { "token": "tok" }
+    },
+    {
+      "name": "me chỉ là một lượt đọc",
+      "method": "me",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api/me" }
+    },
+    {
+      "name": "logout bỏ luôn thẻ đang giữ ở đây",
+      "method": "logout",
+      "args": {},
+      "expect": { "verb": "POST", "path": "/api/logout" },
+      "after": { "token": null }
+    },
+    {
+      "name": "logout_all cũng bỏ thẻ, vì máy chủ vừa giết nó",
+      "method": "logout_all",
+      "args": {},
+      "expect": { "verb": "POST", "path": "/api/logout-all" },
+      "after": { "token": null }
+    },
+    {
+      "name": "health hỏi máy chủ còn sống không",
+      "method": "health",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api/health" }
+    },
+    {
+      "name": "describe đọc bản mô tả dịch vụ ở đường well-known",
+      "method": "describe",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/.well-known/orilife.json" }
+    },
+    {
+      "name": "endpoints đọc danh mục cửa của chính máy chủ",
+      "method": "endpoints",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api" }
+    },
+    {
+      "name": "species_catalog đọc danh mục loài",
+      "method": "species_catalog",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api/species/catalog" }
+    },
+    {
+      "name": "resolve thoát mã trong đường dẫn",
+      "method": "resolve",
+      "args": { "code": "ORI-w3gv5p7-6PCA7HC8" },
+      "expect": { "verb": "GET", "path": "/api/resolve/ORI-w3gv5p7-6PCA7HC8" }
+    },
+    {
+      "name": "resolve thoát cả dấu gạch chéo, không để nó cắt đường dẫn",
+      "method": "resolve",
+      "args": { "code": "a/b?c" },
+      "expect": { "verb": "GET", "path": "/api/resolve/a%2Fb%3Fc" }
+    },
+    {
+      "name": "tree_by_code tra theo mã in trên phiếu",
+      "method": "tree_by_code",
+      "args": { "code": "ORI-w6h3sjx-9KYR3TZF" },
+      "expect": { "verb": "GET", "path": "/api/tree_by_code/ORI-w6h3sjx-9KYR3TZF" }
+    },
+    {
+      "name": "lookup_fruit gửi một ảnh dưới tên trường file",
+      "method": "lookup_fruit",
+      "args": { "image": { "$file": "fruit.jpg" } },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/fruit/lookup",
+        "files": [["file", "fruit.jpg"]]
+      }
+    },
+    {
+      "name": "identify_auto gửi mọi ảnh dưới tên trường files",
+      "method": "identify_auto",
+      "args": {
+        "images": [{ "$file": "a.jpg" }, { "$file": "b.jpg" }],
+        "lat": 10.762622, "lon": 106.660172
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/identify/auto",
+        "fields": { "lat": "10.762622", "lon": "106.660172" },
+        "files": [["files", "a.jpg"], ["files", "b.jpg"]]
+      }
+    },
+    {
+      "name": "identify_auto không gửi trường rỗng thành chữ none",
+      "method": "identify_auto",
+      "args": { "images": [{ "$file": "a.jpg" }] },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/identify/auto",
+        "fields": {},
+        "files": [["files", "a.jpg"]]
+      }
+    },
+    {
+      "name": "identify_tree đóng dấu nguồn là sdk",
+      "method": "identify_tree",
+      "args": {
+        "images": [{ "$file": "a.jpg" }, { "$file": "b.jpg" }],
+        "lat": 10.762622, "lon": 106.660172, "last_tree": "t-9"
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/identify",
+        "fields": {
+          "lat": "10.762622", "lon": "106.660172", "last_tree": "t-9", "source": "sdk"
+        },
+        "files": [["files", "a.jpg"], ["files", "b.jpg"]]
+      }
+    },
+    {
+      "name": "một tệp lẻ KHÔNG bọc trong danh sách vẫn lên đúng một tệp",
+      "method": "identify_tree",
+      "args": { "images": { "$single_file": "photo.jpg" } },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/identify",
+        "fields": { "source": "sdk" },
+        "files": [["files", "photo.jpg"]]
+      }
+    },
+    {
+      "name": "identify_tree_video nới hạn chờ vì tải một đoạn phim lâu hơn một tấm ảnh",
+      "method": "identify_tree_video",
+      "args": { "video": { "$file": "walk.mp4" }, "lat": 10.5, "lon": 106.5 },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/identify/video",
+        "fields": { "lat": "10.5", "lon": "106.5", "source": "sdk" },
+        "files": [["file", "walk.mp4"]],
+        "timeout_seconds_at_least": 120
+      }
+    },
+    {
+      "name": "identify_fruit thu hẹp về một cây khi có tree_id",
+      "method": "identify_fruit",
+      "args": { "image": { "$file": "fruit.jpg" }, "tree_id": "t-1" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/fruit/identify",
+        "fields": { "tree_id": "t-1" },
+        "files": [["file", "fruit.jpg"]]
+      }
+    },
+    {
+      "name": "identify_animal gửi ảnh dưới tên trường image, không phải file",
+      "method": "identify_animal",
+      "args": { "image": { "$file": "cow.jpg" }, "species": "bo", "farm_id": "f-1" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/animal/identify",
+        "fields": { "species": "bo", "farm_id": "f-1" },
+        "files": [["image", "cow.jpg"]]
+      }
+    },
+    {
+      "name": "identify_animal thiếu đàn thì ném NGAY, không tải ảnh lên rồi mới biết",
+      "method": "identify_animal",
+      "args": { "image": { "$file": "cow.jpg" }, "species": "bo" },
+      "throws": "bad_argument"
+    },
+    {
+      "name": "identify_kind chỉ hỏi trong ảnh là con gì",
+      "method": "identify_kind",
+      "args": { "image": { "$file": "x.jpg" } },
+      "expect": { "verb": "POST", "path": "/api/kind", "files": [["file", "x.jpg"]] }
+    },
+    {
+      "name": "scan_animal bắt buộc có vườn, loài thì tuỳ",
+      "method": "scan_animal",
+      "args": { "image": { "$file": "cow.jpg" }, "farm_id": "f-1" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/animal/scan",
+        "fields": { "farm_id": "f-1" },
+        "files": [["image", "cow.jpg"]]
+      }
+    },
+    {
+      "name": "scan_animal chuyển tiếp loài khi người dùng đã xác nhận",
+      "method": "scan_animal",
+      "args": { "image": { "$file": "cow.jpg" }, "farm_id": "f-1", "species": "de" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/animal/scan",
+        "fields": { "farm_id": "f-1", "species": "de" },
+        "files": [["image", "cow.jpg"]]
+      }
+    },
+    {
+      "name": "enroll_tree gửi tên cây và mọi góc chụp",
+      "method": "enroll_tree",
+      "args": {
+        "images": [{ "$file": "a.jpg" }, { "$file": "b.jpg" }],
+        "name": "cây số 47", "lat": 11.5449, "lon": 107.4123, "farm_id": "f-1", "species": "sau-rieng"
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/enroll",
+        "fields": {
+          "name": "cây số 47", "lat": "11.5449", "lon": "107.4123",
+          "farm_id": "f-1", "species": "sau-rieng"
+        },
+        "files": [["files", "a.jpg"], ["files", "b.jpg"]]
+      }
+    },
+    {
+      "name": "verify_add gắn góc mới vào đúng cây",
+      "method": "verify_add",
+      "args": { "tree_id": "t-1", "images": [{ "$file": "c.jpg" }] },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/verify_add",
+        "fields": { "tree_id": "t-1" },
+        "files": [["files", "c.jpg"]]
+      }
+    },
+    {
+      "name": "list_trees đặt bộ lọc vào chuỗi truy vấn",
+      "method": "list_trees",
+      "args": { "farm_id": "f-1" },
+      "expect": { "verb": "GET", "path": "/api/trees", "query": { "farm_id": "f-1" } }
+    },
+    {
+      "name": "list_trees không có bộ lọc thì không gửi tham số rỗng",
+      "method": "list_trees",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api/trees", "query": {} }
+    },
+    {
+      "name": "enroll_fruit gửi cây, tên và bốn số khung bao",
+      "method": "enroll_fruit",
+      "args": {
+        "images": [{ "$file": "f.jpg" }], "tree_id": "t-1", "name": "quả 3",
+        "bbox": [10, 20, 30, 40]
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/fruit/enroll",
+        "fields": {
+          "tree_id": "t-1", "name": "quả 3",
+          "bbox_x": "10", "bbox_y": "20", "bbox_w": "30", "bbox_h": "40"
+        },
+        "files": [["file", "f.jpg"]]
+      }
+    },
+    {
+      "name": "enroll_fruit nhận khung bao dạng khoá tên cũng ra đúng bốn trường ấy",
+      "method": "enroll_fruit",
+      "args": {
+        "images": [{ "$file": "f.jpg" }], "tree_id": "t-1",
+        "bbox": { "x": 1, "y": 2, "w": 3, "h": 4 }
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/fruit/enroll",
+        "fields": {
+          "tree_id": "t-1", "bbox_x": "1", "bbox_y": "2", "bbox_w": "3", "bbox_h": "4"
+        },
+        "files": [["file", "f.jpg"]]
+      }
+    },
+    {
+      "name": "khung bao dị dạng bị chặn TRƯỚC khi có gì được tải lên",
+      "method": "enroll_fruit",
+      "args": { "images": [{ "$file": "f.jpg" }], "tree_id": "t-1", "bbox": [1, 2, 3] },
+      "throws": "bad_argument"
+    },
+    {
+      "name": "enroll_fruit từ chối ảnh thứ hai thay vì lặng lẽ bỏ nó đi",
+      "method": "enroll_fruit",
+      "args": {
+        "images": [{ "$file": "a.jpg" }, { "$file": "b.jpg" }], "tree_id": "t-1"
+      },
+      "throws": "bad_argument"
+    },
+    {
+      "name": "add_fruit_view gửi một góc cho một quả",
+      "method": "add_fruit_view",
+      "args": { "fruit_id": "q-1", "images": [{ "$file": "v.jpg" }] },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/fruit/add_view",
+        "fields": { "fruit_id": "q-1" },
+        "files": [["file", "v.jpg"]]
+      }
+    },
+    {
+      "name": "add_fruit_view cũng chỉ nhận đúng một ảnh mỗi lượt",
+      "method": "add_fruit_view",
+      "args": { "fruit_id": "q-1", "images": [{ "$file": "a.jpg" }, { "$file": "b.jpg" }] },
+      "throws": "bad_argument"
+    },
+    {
+      "name": "enroll_animal gửi ảnh dưới tên trường images, không phải files",
+      "method": "enroll_animal",
+      "args": {
+        "images": [{ "$file": "a.jpg" }, { "$file": "b.jpg" }],
+        "species": "bo", "farm_id": "f-1", "name": "Bò 12", "owner_did": "did:phoenix:abc"
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/animal/enroll",
+        "fields": {
+          "species": "bo", "farm_id": "f-1", "name": "Bò 12", "owner_did": "did:phoenix:abc"
+        },
+        "files": [["images", "a.jpg"], ["images", "b.jpg"]]
+      }
+    },
+    {
+      "name": "list_animals đặt phân trang vào chuỗi truy vấn",
+      "method": "list_animals",
+      "args": { "farm_id": "f-1", "species": "bo", "limit": 50, "offset": 100 },
+      "expect": {
+        "verb": "GET",
+        "path": "/api/animal/list",
+        "query": { "farm_id": "f-1", "species": "bo", "limit": "50", "offset": "100" }
+      }
+    },
+    {
+      "name": "list_animals không bộ lọc thì không gửi tham số rỗng",
+      "method": "list_animals",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api/animal/list", "query": {} }
+    },
+    {
+      "name": "create_farm gửi tâm vườn dưới dạng JSON GỌN, giống hệt nhau ở mọi ngôn ngữ",
+      "method": "create_farm",
+      "args": { "name": "Vườn A", "lat": 10.762622, "lon": 106.660172 },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/farm",
+        "fields": { "name": "Vườn A", "center_json": "[10.762622,106.660172]" }
+      }
+    },
+    {
+      "name": "create_farm thiếu một nửa toạ-độ thì không gửi tâm nào cả",
+      "method": "create_farm",
+      "args": { "name": "Vườn A", "lat": 10.762622 },
+      "expect": { "verb": "POST", "path": "/api/farm", "fields": { "name": "Vườn A" } }
+    },
+    {
+      "name": "list_farms chỉ liệt kê vườn của chính tài khoản",
+      "method": "list_farms",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api/farms" }
+    },
+    {
+      "name": "get_farm thoát định danh trong đường dẫn",
+      "method": "get_farm",
+      "args": { "farm_id": "f 1/2" },
+      "expect": { "verb": "GET", "path": "/api/farm/f%201%2F2" }
+    },
+    {
+      "name": "update_farm mã hoá JSON cho ranh giới thay vì ép chuỗi một mảng",
+      "method": "update_farm",
+      "args": {
+        "farm_id": "f-1",
+        "fields": {
+          "boundary_json": [[10.7, 106.6], [10.8, 106.7]],
+          "boundary_method": "gps_walk"
+        }
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/farm/f-1/update",
+        "fields": {
+          "boundary_json": "[[10.7,106.6],[10.8,106.7]]",
+          "boundary_method": "gps_walk"
+        }
+      }
+    },
+    {
+      "name": "update_farm chỉ gửi những trường được đưa vào",
+      "method": "update_farm",
+      "args": { "farm_id": "f-1", "fields": { "note": "đã tỉa cành" } },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/farm/f-1/update",
+        "fields": { "note": "đã tỉa cành" }
+      }
+    },
+    {
+      "name": "delete_farm dùng đúng động từ DELETE",
+      "method": "delete_farm",
+      "args": { "farm_id": "f-1" },
+      "expect": { "verb": "DELETE", "path": "/api/farm/f-1" }
+    },
+    {
+      "name": "submit_verdict gửi cây đúng dưới tên viết tắt correct_tid mà máy chủ dùng",
+      "method": "submit_verdict",
+      "args": { "query_id": "q-1", "verdict": "wrong", "correct_tree_id": "t-9" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/identify_verdict",
+        "fields": { "query_id": "q-1", "verdict": "wrong", "correct_tid": "t-9" }
+      }
+    },
+    {
+      "name": "một câu đúng đơn thuần không kèm trường sửa nào",
+      "method": "submit_verdict",
+      "args": { "query_id": "q-1", "verdict": "correct" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/identify_verdict",
+        "fields": { "query_id": "q-1", "verdict": "correct" }
+      }
+    },
+    {
+      "name": "submit_fruit_verdict đi tới cửa của quả",
+      "method": "submit_fruit_verdict",
+      "args": { "query_id": "q-2", "verdict": "wrong", "correct_fruit_id": "qu-3" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/fruit/identify_verdict",
+        "fields": { "query_id": "q-2", "verdict": "wrong", "correct_fruit_id": "qu-3" }
+      }
+    },
+    {
+      "name": "submit_animal_verdict gọi tên con vật bằng định danh phi tập trung",
+      "method": "submit_animal_verdict",
+      "args": { "query_id": "q-3", "verdict": "unknown_ok", "correct_did": "did:phoenix:xyz" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/animal/identify_verdict",
+        "fields": {
+          "query_id": "q-3", "verdict": "unknown_ok", "correct_did": "did:phoenix:xyz"
+        }
+      }
+    },
+    {
+      "name": "capture_plan hỏi bằng đúng tên tham số máy chủ dùng cho truy vấn",
+      "method": "capture_plan",
+      "args": { "entity_type": "fruit", "entity_id": "qu-1" },
+      "expect": {
+        "verb": "GET",
+        "path": "/api/capture/plan",
+        "query": { "target_type": "fruit", "target_id": "qu-1" }
+      }
+    },
+    {
+      "name": "provenance đọc gốc gác của một cây",
+      "method": "provenance",
+      "args": { "tree_id": "t-1" },
+      "expect": { "verb": "GET", "path": "/api/provenance/t-1" }
+    },
+    {
+      "name": "timeline giữ nguyên loại thực thể trong đường dẫn nhưng thoát định danh",
+      "method": "timeline",
+      "args": { "entity_type": "tree", "entity_id": "t 1" },
+      "expect": { "verb": "GET", "path": "/api/tree/t%201/timeline" }
+    },
+    {
+      "name": "proof trỏ tới đúng sự kiện cần chứng minh",
+      "method": "proof",
+      "args": { "entity_type": "fruit", "entity_id": "qu-1", "event_id": "e-7" },
+      "expect": { "verb": "GET", "path": "/api/fruit/qu-1/proof/e-7" }
+    },
+    {
+      "name": "add_event gửi loại sự kiện và đặt dữ liệu người gọi vào payload",
+      "method": "add_event",
+      "args": { "entity_type": "tree", "entity_id": "t-1", "kind": "water", "data": { "litres": 20 } },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/tree/t-1/event",
+        "json": { "kind": "water", "payload": { "litres": 20 } }
+      }
+    },
+    {
+      "name": "add_event không có dữ liệu vẫn mang theo loại của nó",
+      "method": "add_event",
+      "args": { "entity_type": "tree", "entity_id": "t-1", "kind": "observe" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/tree/t-1/event",
+        "json": { "kind": "observe", "payload": {} }
+      }
+    },
+    {
+      "name": "anchor_event gọi tên sự kiện người dùng bấm niêm phong",
+      "method": "anchor_event",
+      "args": { "entity_type": "tree", "entity_id": "t-1", "event_id": "e-7" },
+      "expect": { "verb": "POST", "path": "/api/tree/t-1/event/e-7/anchor" }
+    }
+  ]
+}
