@@ -7,3 +7,6 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+
+# Nhà riêng của agent — ghi chú, thư nội bộ, tệp tự sinh. KHÔNG vào kho.
+_Agents/
