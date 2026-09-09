@@ -76,7 +76,7 @@ account holding real data, so clean it up when you are done.
 That is deliberate: a verifier must still work when you do not trust the people who wrote it. You
 can read `python/orilife/verify.py` end to end in about ten minutes, which is the point.
 
-It is checked against the vectors in `python/tests/vectors.json`, generated from the code running on
+It is checked against the vectors in `contract/vectors.json`, generated from the code running on
 the server, and both implementations (Python and JavaScript) must match. Details, and the procedure
 for doing every step by hand without this SDK at all: [VERIFY.md](VERIFY.md).
 

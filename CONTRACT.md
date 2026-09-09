@@ -216,8 +216,9 @@ not interpret them.
 One call for any kind: send photos, the server works out whether it is a tree, a fruit or an
 animal, and identifies it. Your app **does not have to ask the user what they are photographing**.
 
-It is **only available on servers that list it in `GET /api`**. Measured on
-`https://api.orilife.io` on 2026-08-20 it returned `404`. Check before calling:
+It is **only available on servers that list it in `GET /api`**, so check before calling. On
+`https://api.orilife.io` it was absent on 2026-08-20 and present on 2026-09-08 — nineteen days, and
+nothing announced the change. Guard the call rather than trusting either measurement:
 
 ```python
 if client.supports("/api/identify/auto"):
@@ -305,20 +306,25 @@ because this is measurement data, not a resource access.
 
 ## 6. Capture plan
 
-`GET /api/capture/plan` — what is missing and what to photograph next. One endpoint for trees,
-fruit and animals, with the same response shape for all three, so a single screen can serve all of
-them.
+`GET /api/capture/plan` — what is missing and what to photograph next, with the same response shape
+for every kind it accepts, so a single screen can serve all of them.
 
-Query parameters: `target_type` (`tree` · `fruit` · `animal`), `target_id`, and optionally
-`after_reject` if you are calling right after a rejected attempt (it turns a refusal into a task).
+Query parameters: `target_type`, `target_id`, and optionally `after_reject` if you are calling right
+after a rejected attempt (it turns a refusal into a task).
+
+**`animal` is UNRESOLVED — do not build on it.** `target_type` is `tree` or `fruit` for certain. An
+earlier revision of this page listed `animal` as a third value; the server team's own endpoint
+contract restricts the parameter to `tree|fruit`; and `/openapi.json` types it as a plain string,
+which settles nothing either way. Nobody has measured it against a live account. Until somebody
+does, treat `animal` as unsupported and handle the `422` — guessing in the permissive direction
+means shipping a capture screen that dies in an orchard.
 
 Returns `{"ok": true, "target_type": ..., "target_id": ..., "after_reject": ..., ...plan}`. The plan
 carries `have_kind`, which tells you how to read `have`: `"faces"` for fruit (counted per face) or
-`"coverage"` for trees and animals (counted per photo). Animals have no `missing` / `thin` lists —
-empty arrays there are the correct answer, not an unfinished feature.
+`"coverage"` (counted per photo).
 
-Only objects belonging to the logged-in account are visible. `target_type` outside the three values
-returns `422`.
+Only objects belonging to the logged-in account are visible. An unaccepted `target_type` returns
+`422`.
 
 ---
 
@@ -483,15 +489,23 @@ The SDK wraps the first of these:
 client.supports("/api/identify/auto")   # reads GET /api once, then answers offline
 ```
 
-**Three endpoints were not live on `https://api.orilife.io` on 2026-08-20** — `POST
-/api/identify/auto`, `GET /.well-known/orilife.json` and `GET /llms.txt` all returned `404`. They
-exist on servers built from a newer branch. Consequences you should design for:
+**Availability moves, and nothing announces it.** `POST /api/identify/auto`, `GET
+/.well-known/orilife.json` and `GET /llms.txt` all answered `404` on `https://api.orilife.io` on
+2026-08-20. Measured again on 2026-09-08 they answered `405` (the route exists and takes POST),
+`200` and `200`. Nineteen days, no notice — and for nineteen days this page said the opposite of
+what the server did.
 
-1. Anything you build on them must be guarded by `supports()`, or by catching `NotFoundError`.
+That is the reason a sentence like this one cannot be the thing your code trusts. Design for it:
+
+1. Anything you build on an optional endpoint must be guarded by `supports()`, or by catching
+   `NotFoundError`. Never by a date written in a document.
 2. The SDK **never silently substitutes** another endpoint on `404`. Changing behaviour quietly is
    a worse failure mode than a visible error.
 3. `describe()` (the service descriptor) will raise `NotFoundError` on servers that do not ship it.
    That is the correct answer, not a bug.
+4. `tools/check_server_drift.py` compares `contract/methods.json` against the live
+   `/openapi.json` and reports **KHỚP / LỆCH / KHÔNG ĐO ĐƯỢC**. It runs in CI. That is what
+   noticing looks like when it is mechanical instead of hopeful.
 
 ---
 
@@ -516,44 +530,11 @@ That is a result, not an error: do not retry, ask the person or invite one more 
 
 ## 14. SDK method map
 
-Python uses `snake_case`, JavaScript uses `camelCase`; the order and the semantics are identical.
+The map is **generated**, not typed: [`contract/METHODS.md`](contract/METHODS.md), produced by
+`tools/generate.py` from [`contract/methods.json`](contract/methods.json). Every method in both
+languages is generated from that same table, so a signature written here by hand could disagree
+with the code — and there would be nothing to catch it. There is nothing to catch it *now* either,
+which is why the table lives there and this section is a pointer.
 
-| Python | JavaScript | HTTP |
-|---|---|---|
-| `create_farm(name, *, lat=None, lon=None)` | `createFarm(name, {lat, lon})` | `POST /api/farm` |
-| `list_farms()` | `listFarms()` | `GET /api/farms` |
-| `get_farm(farm_id)` | `getFarm(farmId)` | `GET /api/farm/{farm_id}` |
-| `update_farm(farm_id, **fields)` | `updateFarm(farmId, fields)` | `POST /api/farm/{farm_id}/update` |
-| `delete_farm(farm_id)` | `deleteFarm(farmId)` | `DELETE /api/farm/{farm_id}` |
-| `enroll_fruit(images, *, tree_id, name=None, bbox=None)` | `enrollFruit(images, {treeId, name, bbox})` | `POST /api/fruit/enroll` |
-| `add_fruit_view(fruit_id, images)` | `addFruitView(fruitId, images)` | `POST /api/fruit/add_view` |
-| `enroll_animal(images, *, species, farm_id, name=None, owner_did=None)` | `enrollAnimal(images, {species, farmId, name, ownerDid})` | `POST /api/animal/enroll` |
-| `scan_animal(image, *, farm_id, species=None)` | `scanAnimal(image, {farmId, species})` | `POST /api/animal/scan` |
-| `list_animals(*, farm_id=None, species=None, limit=None, offset=None)` | `listAnimals({farmId, species, limit, offset})` | `GET /api/animal/list` |
-| `submit_verdict(query_id, verdict, *, correct_tree_id=None)` | `submitVerdict(queryId, verdict, {correctTreeId})` | `POST /api/identify_verdict` |
-| `submit_fruit_verdict(query_id, verdict, *, correct_fruit_id=None)` | `submitFruitVerdict(queryId, verdict, {correctFruitId})` | `POST /api/fruit/identify_verdict` |
-| `submit_animal_verdict(query_id, verdict, *, correct_did=None)` | `submitAnimalVerdict(queryId, verdict, {correctDid})` | `POST /api/animal/identify_verdict` |
-| `capture_plan(entity_type, entity_id)` | `capturePlan(entityType, entityId)` | `GET /api/capture/plan` |
-| `add_event(entity_type, entity_id, kind, data=None)` | `addEvent(entityType, entityId, kind, data)` | `POST /api/{entity_type}/{entity_id}/event` |
-| `anchor_event(entity_type, entity_id, event_id)` | `anchorEvent(entityType, entityId, eventId)` | `POST /api/{entity_type}/{entity_id}/event/{event_id}/anchor` |
-| `logout_all()` | `logoutAll()` | `POST /api/logout-all` |
-
-Plus one method that is not an HTTP endpoint:
-
-| Python | JavaScript | Behaviour |
-|---|---|---|
-| `supports(path) -> bool` | `supports(path)` | Reads `GET /api` once, caches it, returns whether the server advertises that path |
-
-Two places where the SDK argument name differs from the HTTP field name, because the HTTP names are
-abbreviations kept for backward compatibility:
-
-| SDK argument | HTTP field |
-|---|---|
-| `correct_tree_id` | `correct_tid` |
-| `entity_type` / `entity_id` in `capture_plan` | `target_type` / `target_id` (query parameters) |
-
-Earlier methods (`signup`, `login`, `logout`, `me`, `health`, `describe`, `endpoints`,
-`species_catalog`, `resolve`, `tree_by_code`, `lookup_fruit`, `identify_auto`, `identify_tree`,
-`identify_tree_video`, `identify_fruit`, `identify_animal`, `identify_kind`, `enroll_tree`,
-`verify_add`, `list_trees`, `provenance`, `timeline`, `proof`) keep the names and signatures they
-already had.
+`contract/methods.json` also records, per endpoint, whether a failed call is safe to send again.
+That is the one policy nobody should have to re-derive by reading the code.

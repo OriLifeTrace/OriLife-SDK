@@ -295,7 +295,7 @@ already out in the world.
 
 ## Test vectors
 
-`python/tests/vectors.json` is generated from the code running on the OriLife server: entity codes,
+`contract/vectors.json` is generated from the code running on the OriLife server: entity codes,
 a full record with its hash, and a legacy-era record with its legacy hash. Both the Python and the
 JavaScript implementations are checked against it.
 
@@ -305,7 +305,7 @@ through.
 
 ```bash
 cd python && python -m pytest tests/test_verify.py -q
-cd javascript && node --test test/verify.test.mjs
+cd javascript && node --test 'test/verify.test.mjs'
 ```
 
 Both run **offline**. If they needed the network they would not be independent verification.

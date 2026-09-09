@@ -1,8 +1,7 @@
 name: Tests
 
-# Both suites check against the SAME vector set, generated from the code actually running on the
-# server. Running both in one pass is deliberate: a bug only slips through if it shows up
-# identically in both languages.
+# Cả hai bản cài chạy CÙNG một bộ ca (`contract/`): cùng bộ số kiểm chứng, cùng bộ ca hợp-lệ.
+# Chạy chung một lượt là cố ý — một lỗi chỉ lọt được khi nó xuất hiện GIỐNG HỆT ở cả hai ngôn ngữ.
 on:
   push:
     branches: ['**']
@@ -13,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # 3.9 is the floor promised in pyproject. A promise nobody runs is not a promise.
+        # 3.9 là mức sàn đã hứa trong pyproject. Một lời hứa không ai chạy thì không phải lời hứa.
         python-version: ['3.9', '3.12']
     steps:
       - uses: actions/checkout@v4
@@ -31,23 +30,35 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node --test test/
+      - run: node --test
         working-directory: javascript
 
-  no-dependencies:
-    # This package declares NO dependencies. That declaration needs a guard, because a stray
-    # `import requests` would not turn any test red -- it would only stop this package from
-    # running in the places it exists to run: an embedded device in a field, an agent's sandbox,
-    # a serverless function with a size cap.
+  generated-code-is-current:
+    # Mã khách sinh từ `contract/methods.json` và được COMMIT vào kho. Sửa hợp đồng mà quên sinh
+    # lại thì không có gì kêu — trừ bước này. Chạy ngoại tuyến, luôn trả lời được, nên nó ĐỎ khi
+    # lệch, không có trạng thái thứ ba.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Python uses only the standard library
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 tools/generate.py --check
+
+  no-dependencies:
+    # Gói này khai KHÔNG phụ thuộc gì. Lời khai đó cần một người canh, vì một dòng `import requests`
+    # lạc vào sẽ không làm phép kiểm nào đỏ — nó chỉ khiến gói thôi chạy được ở đúng những nơi nó
+    # sinh ra để chạy: một thiết bị nhúng ngoài vườn, hộp cát của một agent, một hàm serverless có
+    # trần dung lượng.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python chỉ dùng thư viện chuẩn
         run: |
           if grep -rnE '^\s*(import|from)\s+(requests|httpx|aiohttp|numpy|pydantic)\b' python/orilife/; then
             echo "::error::Python package picked up an external dependency"; exit 1
           fi
-      - name: JavaScript has no dependencies
+      - name: JavaScript không có phụ thuộc nào
         run: |
           python3 - <<'PY'
           import json
@@ -56,3 +67,33 @@ jobs:
           if extra:
               raise SystemExit(f"::error::JavaScript package picked up dependencies: {sorted(extra)}")
           PY
+
+  contract-matches-the-live-server:
+    # Câu hỏi KHÁC hẳn bước trên: bước trên hỏi "mã có khớp hợp đồng không" (ngoại tuyến), bước này
+    # hỏi "hợp đồng có khớp máy chủ đang chạy không" (cần mạng).
+    #
+    # BA trạng thái, không phải hai. Lệch thật thì ĐỎ. Không lấy được đặc tả thì để lại một cảnh
+    # báo NÓI RÕ rằng cổng KHÔNG chạy — tuyệt đối không im lặng thành màu xanh, vì "tôi không biết"
+    # nói bằng giọng "ổn" là thứ nguy hiểm hơn cả một câu trả lời sai.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Đối chiếu contract/methods.json với /openapi.json
+        run: |
+          set +e
+          python3 tools/check_server_drift.py
+          code=$?
+          set -e
+          if [ "$code" = "0" ]; then
+            echo "KHỚP"
+          elif [ "$code" = "1" ]; then
+            echo "::error::LỆCH — hợp đồng khai cửa máy chủ không phục vụ. Xem nhật ký."
+            exit 1
+          else
+            echo "::warning::KHÔNG ĐO ĐƯỢC — không lấy được /openapi.json. Cổng này KHÔNG chạy lần này; đừng đọc thành 'không có gì lệch'."
+            exit 1
+          fi

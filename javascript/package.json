@@ -12,7 +12,7 @@
   },
   "files": ["src", "README.md"],
   "engines": { "node": ">=18" },
-  "scripts": { "test": "node --test test/" },
+  "scripts": { "test": "node --test" },
   "keywords": ["traceability", "agriculture", "identification", "cardano", "provenance", "orilife"],
   "license": "Apache-2.0",
   "repository": { "type": "git", "url": "git+https://github.com/OriLifeTrace/OriLife-SDK.git" },

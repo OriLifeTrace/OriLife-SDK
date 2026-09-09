@@ -67,7 +67,7 @@ verify.verify_record(record, onchain)   # True means nobody has touched this rec
 ```
 
 The JavaScript package computes the same numbers, and both are checked against one set of vectors
-in `tests/vectors.json`. Two independent implementations agreeing on one set of vectors is far
+in `contract/vectors.json`. Two independent implementations agreeing on one set of vectors is far
 stronger evidence than one implementation checking itself. Details, including how to redo the
 computation by hand: [VERIFY.md](../VERIFY.md).
 
@@ -300,11 +300,11 @@ finishes — you do not spend the whole upload to learn it failed.
 ## Running the tests
 
 ```bash
-cd python && python -m pytest -q      # 67 tests, all offline
+cd python && python -m pytest -q      # all offline, no server needed
 ```
 
 No network, no fixtures to download: the client tests run against a fake server built from the
-standard library, and the verifier tests run against `tests/vectors.json`.
+standard library, and the verifier tests run against `contract/vectors.json`.
 
 ---
 
