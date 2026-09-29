@@ -347,3 +347,69 @@ test('logoutAll drops the local token, because the server just killed it', async
   assert.equal(f.seen[0].init.method, 'POST');
   assert.equal(c.token, null);
 });
+
+// ── the shapes added with the live surface: verb and body TYPE, not just the path ───────────
+
+test('loginWithDid sends JSON and keeps the session token for the next call', async () => {
+  const f = fakeFetch([[200, { ok: true, token: 'did-token' }], [200, { ok: true }]]);
+  const c = new Client('https://x.test', { fetch: f });
+  await c.loginWithDid('did:phoenix:abc', 'c-1', 'MEUCIQ==');
+  assert.equal(f.seen[0].url, 'https://x.test/api/auth/did/verify');
+  assert.equal(f.seen[0].init.method, 'POST');
+  assert.deepEqual(JSON.parse(f.seen[0].init.body),
+    { did: 'did:phoenix:abc', challenge: 'c-1', signature: 'MEUCIQ==' });
+  await c.me();
+  assert.equal(f.seen[1].init.headers.Authorization, 'Bearer did-token');
+});
+
+test('setFruitStatus goes out as PATCH with a form body, not JSON', async () => {
+  const { c, f } = quietClient();
+  await c.setFruitStatus('ORI-FRUIT-0A1B2C3D', 'harvested');
+  assert.equal(f.seen[0].url, 'https://x.test/api/fruit/ORI-FRUIT-0A1B2C3D/status');
+  assert.equal(f.seen[0].init.method, 'PATCH');
+  assert.ok(f.seen[0].init.body instanceof URLSearchParams, 'the server reads a Form field');
+  assert.equal(f.seen[0].init.body.get('status'), 'harvested');
+});
+
+test('revokeGrant goes out as DELETE with no body', async () => {
+  const { c, f } = quietClient();
+  await c.revokeGrant('g-1');
+  assert.equal(f.seen[0].url, 'https://x.test/api/grant/g-1');
+  assert.equal(f.seen[0].init.method, 'DELETE');
+  assert.equal(f.seen[0].init.body, undefined);
+});
+
+test('interpretResidue leaves options it was not given out of the body, even when passed null', async () => {
+  const { c, f } = quietClient();
+  await c.interpretResidue('EU', [{ analyte: 'chlorpyrifos', value: 0.02 }], { cdSoil: null });
+  assert.equal(f.seen[0].init.body,
+    JSON.stringify({ market: 'EU', measurements: [{ analyte: 'chlorpyrifos', value: 0.02 }] }));
+});
+
+test('updateTreeProfile keeps a null, because null means delete that field', async () => {
+  const { c, f } = quietClient();
+  await c.updateTreeProfile('t-1', { notes: null, age_years: 12 });
+  assert.deepEqual(JSON.parse(f.seen[0].init.body), { notes: null, age_years: 12 });
+});
+
+test('updateTreeProfile refuses an array before anything is sent', async () => {
+  const { c, f } = quietClient();
+  assert.throws(() => c.updateTreeProfile('t-1', [['notes', 'x']]), TypeError);
+  assert.equal(f.seen.length, 0);
+});
+
+test('detectAnimalSpecies without a photo is a plain form, with a photo it is multipart', async () => {
+  const { c, f } = quietClient();
+  await c.detectAnimalSpecies('f-1');
+  assert.ok(f.seen[0].init.body instanceof URLSearchParams);
+  assert.equal(f.seen[0].init.body.get('farm_id'), 'f-1');
+  await c.detectAnimalSpecies('f-1', { image: img('cow.jpg') });
+  assert.ok(f.seen[1].init.body instanceof FormData);
+  assert.equal(f.seen[1].init.body.get('image').name, 'cow.jpg');
+});
+
+test('removeTreeViews sends the indices as one comma-separated field', async () => {
+  const { c, f } = quietClient();
+  await c.removeTreeViews('t-1', [0, 2, 5]);
+  assert.equal(f.seen[0].init.body.get('indices'), '0,2,5');
+});

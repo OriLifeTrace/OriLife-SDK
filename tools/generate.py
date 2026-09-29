@@ -70,13 +70,13 @@ def wire_of(method):
     extras = []          # bbox / varfields — built separately
     for arg in method.get("args", []):
         kind = arg["kind"]
-        if kind == "field":
+        if kind in ("field", "csv"):
             fields.append(arg)
         elif kind == "param":
             params.append(arg)
         elif kind in ("file", "files", "one_file"):
             files.append(arg)
-        elif kind in ("json", "json_payload"):
+        elif kind in ("json", "json_payload", "json_object"):
             jsonb.append(arg)
         elif kind in ("bbox", "varfields", "center_pair"):
             extras.append(arg)
@@ -84,7 +84,24 @@ def wire_of(method):
             pass
         else:
             raise SystemExit(f"unknown kind in the contract: {kind!r} ({method['name']})")
+    if any(a["kind"] == "json_object" for a in jsonb) and len(jsonb) != 1:
+        raise SystemExit(f"a json_object argument must be the whole body ({method['name']})")
     return fields, params, files, jsonb, extras
+
+
+def drops_empty_json(jsonb):
+    """True when a JSON body has optional keys.
+
+    An optional key left out must be ABSENT from the body, not `null`: Python would send `null`
+    and JavaScript would drop the key, so the two languages would disagree on the wire — and a
+    server field typed `bool` answers `null` with 422. Required-only bodies are left as they are.
+    """
+    return any(a["kind"] == "json" and not a.get("required") for a in jsonb)
+
+
+def optional_file(arg):
+    """A single file the endpoint accepts but does not require."""
+    return arg["kind"] == "file" and not arg.get("required")
 
 
 # ── Python output ────────────────────────────────────────────────────────────────────────────
@@ -122,7 +139,8 @@ def py_method(method):
     fields, params, files, jsonb, extras = wire_of(method)
     body = []
 
-    dict_items = [f'{js_lit(a["field"])}: {a["name"]}' for a in fields]
+    dict_items = [f'{js_lit(a["field"])}: '
+                  + (f'_csv({a["name"]})' if a["kind"] == "csv" else a["name"]) for a in fields]
     dict_items += [f"{js_lit(k)}: {js_lit(v)}" for k, v in (method.get("constants") or {}).items()]
     for arg in extras:
         if arg["kind"] == "center_pair":
@@ -157,14 +175,23 @@ def py_method(method):
         elif arg["kind"] == "one_file":
             call.append('files=[(%s, _one_file(%s, %s))]'
                         % (js_lit(arg["field"]), arg["name"], js_lit(arg["error"])))
+        elif optional_file(arg):
+            call.append('files=[(%s, %s)] if %s is not None else None'
+                        % (js_lit(arg["field"]), arg["name"], arg["name"]))
         else:
             call.append('files=[(%s, %s)]' % (js_lit(arg["field"]), arg["name"]))
-    if jsonb:
+    if jsonb and jsonb[0]["kind"] == "json_object":
+        call.append("json_body=_json_object(%s, %s)"
+                    % (jsonb[0]["name"], js_lit(method["name"])))
+    elif jsonb:
         pairs = []
         for arg in jsonb:
             value = f"{arg['name']} or {{}}" if arg["kind"] == "json_payload" else arg["name"]
             pairs.append(f'{js_lit(arg["field"])}: {value}')
-        call.append("json_body={%s}" % ", ".join(pairs))
+        body_expr = "{%s}" % ", ".join(pairs)
+        if drops_empty_json(jsonb):
+            body_expr = "_drop_empty(%s)" % body_expr
+        call.append("json_body=%s" % body_expr)
     if method.get("timeout_min_seconds"):
         call.append("timeout=max(self.timeout, %.1f)" % float(method["timeout_min_seconds"]))
     request = ",\n            ".join(call) + ")"
@@ -200,8 +227,8 @@ def emit_python(contract, methods):
         "",
         "from typing import Any",
         "",
-        "from ._wire import (_as_file_list, _bbox_fields, _center_json, _encode_containers,",
-        "                    _one_file, _quote)",
+        "from ._wire import (_as_file_list, _bbox_fields, _center_json, _csv, _drop_empty,",
+        "                    _encode_containers, _json_object, _one_file, _quote)",
         "",
         '__all__ = ["GeneratedMethods", "CONTRACT_VERSION"]',
         "",
@@ -260,7 +287,9 @@ def js_method(method):
         pairs = ", ".join("%s: %s" % (camel(a["name"]), camel(a["name"])) for a in required)
         lines.append("requireArgs(%s, { %s });" % (js_lit(camel(method["name"])), pairs))
 
-    dict_items = ["%s: %s" % (js_lit(a["field"]), camel(a["name"])) for a in fields]
+    dict_items = ["%s: %s" % (js_lit(a["field"]),
+                              ("csvField(%s)" % camel(a["name"])) if a["kind"] == "csv"
+                              else camel(a["name"])) for a in fields]
     dict_items += ["%s: %s" % (js_lit(k), js_lit(v)) for k, v in (method.get("constants") or {}).items()]
     for arg in extras:
         if arg["kind"] == "center_pair":
@@ -292,14 +321,24 @@ def js_method(method):
         elif arg["kind"] == "one_file":
             opts.append("files: [[%s, oneFile(%s, %s)]]"
                         % (js_lit(arg["field"]), camel(arg["name"]), js_lit(arg["error"])))
+        elif optional_file(arg):
+            opts.append("files: (%s === undefined || %s === null) ? [] : [[%s, %s]]"
+                        % (camel(arg["name"]), camel(arg["name"]), js_lit(arg["field"]),
+                           camel(arg["name"])))
         else:
             opts.append("files: [[%s, %s]]" % (js_lit(arg["field"]), camel(arg["name"])))
-    if jsonb:
+    if jsonb and jsonb[0]["kind"] == "json_object":
+        opts.append("json: jsonObject(%s, %s)"
+                    % (camel(jsonb[0]["name"]), js_lit(camel(method["name"]))))
+    elif jsonb:
         pairs = []
         for arg in jsonb:
             value = "%s || {}" % camel(arg["name"]) if arg["kind"] == "json_payload" else camel(arg["name"])
             pairs.append("%s: %s" % (js_lit(arg["field"]), value))
-        opts.append("json: { %s }" % ", ".join(pairs))
+        body_expr = "{ %s }" % ", ".join(pairs)
+        if drops_empty_json(jsonb):
+            body_expr = "dropEmpty(%s)" % body_expr
+        opts.append("json: %s" % body_expr)
     if method.get("timeout_min_seconds"):
         opts.append("timeout: Math.max(this.timeout, %d)" % (int(method["timeout_min_seconds"]) * 1000))
 
@@ -338,7 +377,10 @@ def js_method(method):
 def emit_javascript(contract, methods):
     out = [
         BANNER_JS,
-        "import { asFileList, bboxFields, centerJson, encodeContainers, oneFile, requireArgs } from './wire.js';",
+        "import {",
+        "  asFileList, bboxFields, centerJson, csvField, dropEmpty, encodeContainers, jsonObject, oneFile,",
+        "  requireArgs,",
+        "} from './wire.js';",
         "",
         "export const CONTRACT_VERSION = %s;" % js_lit(contract["contract_version"]),
         "",

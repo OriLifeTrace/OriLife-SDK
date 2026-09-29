@@ -57,7 +57,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    do_GET = do_POST = do_DELETE = _serve
+    do_GET = do_POST = do_DELETE = do_PATCH = _serve
 
 
 @pytest.fixture()
@@ -506,3 +506,77 @@ def test_a_missing_endpoint_raises_instead_of_quietly_using_another_one(server):
     with pytest.raises(errors.NotFoundError):
         _logged_in(server).identify_auto([("a.jpg", b"x")])
     assert len(SEEN) == 1
+
+
+# ── the bytes that actually reach the socket, for the shapes added with the live surface ──
+#
+# The shared conformance cases stop at the transport boundary. These go one layer further and read
+# what the fake server received, because three of the new shapes (PATCH with a form body, a JSON
+# body that must LEAVE OUT absent options, a JSON body that must KEEP a null) are decided by the
+# transport, not by the generated method.
+
+def test_login_with_did_sends_json_and_keeps_the_session_token(server):
+    SCRIPT.append((200, {"ok": True, "token": "did-token", "owner": "did:phoenix:abc"}, {}))
+    SCRIPT.append((200, {"ok": True}, {}))
+    c = Client(server, max_retries=0)
+    c.login_with_did("did:phoenix:abc", "c-1", "MEUCIQ==")
+    assert SEEN[0]["method"] == "POST" and _path(0) == "/api/auth/did/verify"
+    assert SEEN[0]["headers"]["Content-Type"] == "application/json"
+    assert json.loads(SEEN[0]["body"]) == {"did": "did:phoenix:abc", "challenge": "c-1",
+                                           "signature": "MEUCIQ=="}
+    c.me()
+    assert SEEN[1]["headers"]["Authorization"] == "Bearer did-token"
+
+
+def test_set_fruit_status_goes_out_as_patch_with_a_form_body(server):
+    _logged_in(server).set_fruit_status("ORI-FRUIT-0A1B2C3D", "harvested")
+    assert SEEN[0]["method"] == "PATCH"
+    assert _path(0) == "/api/fruit/ORI-FRUIT-0A1B2C3D/status"
+    assert SEEN[0]["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
+    assert _form(0) == {"status": "harvested"}
+
+
+def test_revoke_grant_goes_out_as_delete_with_no_body(server):
+    _logged_in(server).revoke_grant("g-1")
+    assert SEEN[0]["method"] == "DELETE"
+    assert _path(0) == "/api/grant/g-1"
+    assert SEEN[0]["body"] == b""
+
+
+def test_residue_body_leaves_out_options_that_were_not_given(server):
+    """A server field typed as a boolean answers `null` with 422, so an absent option must be an
+    absent KEY, not a key holding null."""
+    _logged_in(server).interpret_residue("EU", [{"analyte": "chlorpyrifos", "value": 0.02}])
+    body = json.loads(SEEN[0]["body"])
+    assert body == {"market": "EU", "measurements": [{"analyte": "chlorpyrifos", "value": 0.02}]}
+    assert b"null" not in SEEN[0]["body"]
+
+
+def test_profile_body_keeps_a_null_because_null_means_delete_that_field(server):
+    _logged_in(server).update_tree_profile("t-1", {"notes": None, "age_years": 12})
+    assert json.loads(SEEN[0]["body"]) == {"notes": None, "age_years": 12}
+
+
+def test_profile_that_is_not_a_mapping_is_refused_before_anything_is_sent(server):
+    with pytest.raises(TypeError):
+        _logged_in(server).update_tree_profile("t-1", [("notes", "x")])
+    assert SEEN == []
+
+
+def test_detect_animal_species_without_a_photo_is_a_plain_form(server):
+    _logged_in(server).detect_animal_species("f-1")
+    assert SEEN[0]["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
+    assert _form(0) == {"farm_id": "f-1"}
+
+
+def test_detect_animal_species_with_a_photo_is_multipart_under_image(server):
+    _logged_in(server).detect_animal_species("f-1", image=("cow.jpg", b"\xff\xd8JPEG"))
+    body = SEEN[0]["body"]
+    assert SEEN[0]["headers"]["Content-Type"].startswith("multipart/form-data")
+    assert b'name="image"; filename="cow.jpg"' in body
+    assert b"\xff\xd8JPEG" in body
+
+
+def test_remove_tree_views_sends_the_indices_as_one_comma_separated_field(server):
+    _logged_in(server).remove_tree_views("t-1", [0, 2, 5])
+    assert _form(0) == {"tree_id": "t-1", "indices": "0,2,5"}

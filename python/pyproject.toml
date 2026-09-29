@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orilife"
-version = "1.0.0"
+version = "1.1.0"
 description = "Identify individual trees, fruit and animals from photographs — the official OriLife SDK"
 readme = "README.md"
 requires-python = ">=3.9"

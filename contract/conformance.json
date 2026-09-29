@@ -533,6 +533,680 @@
       "method": "anchor_event",
       "args": { "entity_type": "tree", "entity_id": "t-1", "event_id": "e-7" },
       "expect": { "verb": "POST", "path": "/api/tree/t-1/event/e-7/anchor" }
+    },
+    {
+      "name": "did_challenge is a plain read that needs no body",
+      "method": "did_challenge",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api/auth/did/challenge" }
+    },
+    {
+      "name": "login_with_did sends JSON without a pubkey_hex key when none is given, and keeps the token",
+      "method": "login_with_did",
+      "args": { "did": "did:phoenix:abc", "challenge": "c-1", "signature": "MEUCIQ==" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/auth/did/verify",
+        "json": { "did": "did:phoenix:abc", "challenge": "c-1", "signature": "MEUCIQ==" }
+      },
+      "after": { "token": "tok" }
+    },
+    {
+      "name": "login_with_did passes pubkey_hex through when it is given",
+      "method": "login_with_did",
+      "args": {
+        "did": "did:phoenix:abc",
+        "challenge": "c-1",
+        "signature": "MEUCIQ==",
+        "pubkey_hex": "04ab"
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/auth/did/verify",
+        "json": {
+          "did": "did:phoenix:abc",
+          "challenge": "c-1",
+          "signature": "MEUCIQ==",
+          "pubkey_hex": "04ab"
+        }
+      }
+    },
+    {
+      "name": "account_data reads the inventory",
+      "method": "account_data",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api/account/data" }
+    },
+    {
+      "name": "delete_account sends the owner reference as the confirmation",
+      "method": "delete_account",
+      "args": { "confirm": "acct:42" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/account/delete",
+        "fields": { "confirm": "acct:42" }
+      }
+    },
+    {
+      "name": "resolve_account asks by exact username in the query string",
+      "method": "resolve_account",
+      "args": { "username": "worker_1" },
+      "expect": {
+        "verb": "GET",
+        "path": "/api/account/resolve",
+        "query": { "username": "worker_1" }
+      }
+    },
+    {
+      "name": "create_grant sends a list of permissions as ONE string, never as a list literal",
+      "method": "create_grant",
+      "args": {
+        "grantee": "did:phoenix:w1",
+        "scope_type": "farm",
+        "scope_id": "f-1",
+        "perms": ["read_private"],
+        "ttl_days": 30,
+        "client_event_id": "press-0001"
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/grant",
+        "fields": {
+          "grantee": "did:phoenix:w1",
+          "scope_type": "farm",
+          "scope_id": "f-1",
+          "perms": "read_private",
+          "ttl_days": "30",
+          "client_event_id": "press-0001"
+        }
+      }
+    },
+    {
+      "name": "create_grant passes a permission string through untouched",
+      "method": "create_grant",
+      "args": {
+        "grantee": "acct:7",
+        "scope_type": "tree",
+        "scope_id": "t-1",
+        "perms": "read_private"
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/grant",
+        "fields": {
+          "grantee": "acct:7",
+          "scope_type": "tree",
+          "scope_id": "t-1",
+          "perms": "read_private"
+        }
+      }
+    },
+    {
+      "name": "list_grants reads both directions of sharing",
+      "method": "list_grants",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api/grants" }
+    },
+    {
+      "name": "revoke_grant uses DELETE and escapes the identifier",
+      "method": "revoke_grant",
+      "args": { "grant_id": "g/1" },
+      "expect": { "verb": "DELETE", "path": "/api/grant/g%2F1" }
+    },
+    {
+      "name": "match_care_product sends label text and pack photos under files",
+      "method": "match_care_product",
+      "args": { "text": "Anvil 5SC", "scope": "sau_rieng", "images": [{ "$file": "label.jpg" }] },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/care/match",
+        "fields": { "text": "Anvil 5SC", "scope": "sau_rieng" },
+        "files": [["files", "label.jpg"]]
+      }
+    },
+    {
+      "name": "match_care_product with text only uploads no file",
+      "method": "match_care_product",
+      "args": { "text": "Anvil 5SC" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/care/match",
+        "fields": { "text": "Anvil 5SC" },
+        "files": []
+      }
+    },
+    {
+      "name": "log_care names the subject, the product and the retry key",
+      "method": "log_care",
+      "args": {
+        "target_type": "tree",
+        "target_id": "t-1",
+        "product_id": "p-9",
+        "dose": "20ml/8L",
+        "client_event_id": "press-0002",
+        "images": [{ "$file": "pack.jpg" }]
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/care/log",
+        "fields": {
+          "target_type": "tree",
+          "target_id": "t-1",
+          "product_id": "p-9",
+          "dose": "20ml/8L",
+          "client_event_id": "press-0002"
+        },
+        "files": [["files", "pack.jpg"]]
+      }
+    },
+    {
+      "name": "list_care_events asks by subject in the query string",
+      "method": "list_care_events",
+      "args": { "target_type": "animal", "target_id": "did:phoenix:c7" },
+      "expect": {
+        "verb": "GET",
+        "path": "/api/care/events",
+        "query": { "target_type": "animal", "target_id": "did:phoenix:c7" }
+      }
+    },
+    {
+      "name": "list_care_products filters by scope only when asked",
+      "method": "list_care_products",
+      "args": { "scope": "sau_rieng" },
+      "expect": { "verb": "GET", "path": "/api/care/products", "query": { "scope": "sau_rieng" } }
+    },
+    {
+      "name": "withdrawal_status asks by subject in the query string",
+      "method": "withdrawal_status",
+      "args": { "target_type": "tree", "target_id": "t-1" },
+      "expect": {
+        "verb": "GET",
+        "path": "/api/care/withdrawal",
+        "query": { "target_type": "tree", "target_id": "t-1" }
+      }
+    },
+    {
+      "name": "list_banned_substances sends the label text as q",
+      "method": "list_banned_substances",
+      "args": { "q": "chlorpyrifos" },
+      "expect": { "verb": "GET", "path": "/api/care/banned", "query": { "q": "chlorpyrifos" } }
+    },
+    {
+      "name": "delete_care_event names the record",
+      "method": "delete_care_event",
+      "args": { "care_event_id": "ce-1" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/care/delete",
+        "fields": { "care_event_id": "ce-1" }
+      }
+    },
+    {
+      "name": "interpret_residue leaves options it was not given OUT of the JSON body",
+      "method": "interpret_residue",
+      "args": { "market": "EU", "measurements": [{ "analyte": "chlorpyrifos", "value": 0.02 }] },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/residue/interpret",
+        "json": { "market": "EU", "measurements": [{ "analyte": "chlorpyrifos", "value": 0.02 }] }
+      }
+    },
+    {
+      "name": "interpret_residue sends the options it was given",
+      "method": "interpret_residue",
+      "args": { "market": "CN", "measurements": [], "phi_gate_open": true, "cd_soil": 0.3 },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/residue/interpret",
+        "json": { "market": "CN", "measurements": [], "phi_gate_open": true, "cd_soil": 0.3 }
+      }
+    },
+    {
+      "name": "rename_tree sends the tree and the new name",
+      "method": "rename_tree",
+      "args": { "tree_id": "t-1", "name": "Durian 7" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/rename",
+        "fields": { "tree_id": "t-1", "name": "Durian 7" }
+      }
+    },
+    {
+      "name": "delete_tree names the tree",
+      "method": "delete_tree",
+      "args": { "tree_id": "t-1" },
+      "expect": { "verb": "POST", "path": "/api/delete", "fields": { "tree_id": "t-1" } }
+    },
+    {
+      "name": "update_tree_location sends both halves of the coordinate",
+      "method": "update_tree_location",
+      "args": { "tree_id": "t-1", "lat": 10.5, "lon": 106.7 },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/update_location",
+        "fields": { "tree_id": "t-1", "lat": "10.5", "lon": "106.7" }
+      }
+    },
+    {
+      "name": "set_tree_visibility sends public_card only when it was given",
+      "method": "set_tree_visibility",
+      "args": { "tree_id": "t-1", "visibility": "public_readonly", "public_card": "0" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/tree/set_visibility",
+        "fields": { "tree_id": "t-1", "visibility": "public_readonly", "public_card": "0" }
+      }
+    },
+    {
+      "name": "set_tree_farm without a farm sends no farm_id at all, which detaches the tree",
+      "method": "set_tree_farm",
+      "args": { "tree_id": "t-1" },
+      "expect": { "verb": "POST", "path": "/api/tree/set_farm", "fields": { "tree_id": "t-1" } }
+    },
+    {
+      "name": "set_tree_position sends metres x and z",
+      "method": "set_tree_position",
+      "args": { "tree_id": "t-1", "x": 12.5, "z": -3 },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/tree/set_position",
+        "fields": { "tree_id": "t-1", "x": "12.5", "z": "-3" }
+      }
+    },
+    {
+      "name": "clear_tree_position says clear explicitly instead of sending empty coordinates",
+      "method": "clear_tree_position",
+      "args": { "tree_id": "t-1" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/tree/set_position",
+        "fields": { "tree_id": "t-1", "clear": "1" }
+      }
+    },
+    {
+      "name": "set_tree_species sends the species",
+      "method": "set_tree_species",
+      "args": { "tree_id": "t-1", "species": "sau_rieng" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/tree/set_species",
+        "fields": { "tree_id": "t-1", "species": "sau_rieng" }
+      }
+    },
+    {
+      "name": "add_tree_marker sends label and side",
+      "method": "add_tree_marker",
+      "args": { "tree_id": "t-1", "label": "red ribbon", "side": "left" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/tree/marker",
+        "fields": { "tree_id": "t-1", "label": "red ribbon", "side": "left" }
+      }
+    },
+    {
+      "name": "tree_views asks by tree in the query string",
+      "method": "tree_views",
+      "args": { "tree_id": "t-1" },
+      "expect": { "verb": "GET", "path": "/api/tree_views", "query": { "tree_id": "t-1" } }
+    },
+    {
+      "name": "remove_tree_views sends a list of indices as ONE comma-separated string",
+      "method": "remove_tree_views",
+      "args": { "tree_id": "t-1", "indices": [0, 2, 5] },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/remove_views",
+        "fields": { "tree_id": "t-1", "indices": "0,2,5" }
+      }
+    },
+    {
+      "name": "remove_tree_views passes an index string through untouched",
+      "method": "remove_tree_views",
+      "args": { "tree_id": "t-1", "indices": "1,3" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/remove_views",
+        "fields": { "tree_id": "t-1", "indices": "1,3" }
+      }
+    },
+    {
+      "name": "tree_drift escapes the tree identifier",
+      "method": "tree_drift",
+      "args": { "tree_id": "t 1" },
+      "expect": { "verb": "GET", "path": "/api/tree_drift/t%201" }
+    },
+    {
+      "name": "capture_guidance names the tree in the path",
+      "method": "capture_guidance",
+      "args": { "tree_id": "t-1" },
+      "expect": { "verb": "GET", "path": "/api/capture_guidance/t-1" }
+    },
+    {
+      "name": "tree_growth names the tree in the path",
+      "method": "tree_growth",
+      "args": { "tree_id": "t-1" },
+      "expect": { "verb": "GET", "path": "/api/tree/t-1/growth" }
+    },
+    {
+      "name": "tree_model3d sends only the options it was given, as query parameters",
+      "method": "tree_model3d",
+      "args": { "tree_id": "t-1", "max_points": 50000, "format": "bin" },
+      "expect": {
+        "verb": "GET",
+        "path": "/api/tree/t-1/model3d",
+        "query": { "max_points": "50000", "format": "bin" }
+      }
+    },
+    {
+      "name": "public_tree_model3d looks the model up by public code",
+      "method": "public_tree_model3d",
+      "args": { "code": "ORI-1234567-ABCDEFGH", "colors": "0" },
+      "expect": {
+        "verb": "GET",
+        "path": "/api/tree_by_code/ORI-1234567-ABCDEFGH/model3d",
+        "query": { "colors": "0" }
+      }
+    },
+    {
+      "name": "get_tree_profile reads the declared profile",
+      "method": "get_tree_profile",
+      "args": { "tree_id": "t-1" },
+      "expect": { "verb": "GET", "path": "/api/tree/t-1/profile" }
+    },
+    {
+      "name": "update_tree_profile sends the mapping AS the body, keeping a null that means delete",
+      "method": "update_tree_profile",
+      "args": { "tree_id": "t-1", "profile": { "notes": null, "age_years": 12 } },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/tree/t-1/profile",
+        "json": { "notes": null, "age_years": 12 }
+      }
+    },
+    {
+      "name": "update_tree_profile refuses a body that is not a mapping before sending anything",
+      "method": "update_tree_profile",
+      "args": { "tree_id": "t-1", "profile": "notes=hello" },
+      "expect": {},
+      "throws": true
+    },
+    {
+      "name": "add_tree_video uploads the clip under file with a longer timeout",
+      "method": "add_tree_video",
+      "args": {
+        "tree_id": "t-1",
+        "video": { "$single_file": "walk.mp4" },
+        "lat": 10.5,
+        "note": "east side"
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/tree/t-1/video",
+        "fields": { "lat": "10.5", "note": "east side", "source": "sdk" },
+        "files": [["file", "walk.mp4"]],
+        "timeout_seconds_at_least": 120
+      }
+    },
+    {
+      "name": "add_fruit_video can target one fruit and carries the retry key",
+      "method": "add_fruit_video",
+      "args": {
+        "tree_id": "t-1",
+        "video": { "$single_file": "fruit.mp4" },
+        "fruit_id": "ORI-FRUIT-0A1B2C3D",
+        "client_event_id": "press-0003"
+      },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/tree/t-1/fruit_video",
+        "fields": {
+          "fruit_id": "ORI-FRUIT-0A1B2C3D",
+          "client_event_id": "press-0003",
+          "source": "sdk"
+        },
+        "files": [["file", "fruit.mp4"]],
+        "timeout_seconds_at_least": 120
+      }
+    },
+    {
+      "name": "farm_map names the farm in the path",
+      "method": "farm_map",
+      "args": { "farm_id": "f-1" },
+      "expect": { "verb": "GET", "path": "/api/farm/f-1/map" }
+    },
+    {
+      "name": "farm_layout reads the account-wide layout",
+      "method": "farm_layout",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api/farm/layout" }
+    },
+    {
+      "name": "tree_layout names the tree in the path",
+      "method": "tree_layout",
+      "args": { "tree_id": "t-1" },
+      "expect": { "verb": "GET", "path": "/api/tree/t-1/layout" }
+    },
+    {
+      "name": "detect_fruit sends one photo under file",
+      "method": "detect_fruit",
+      "args": { "image": { "$file": "f.jpg" }, "tree_id": "t-1" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/fruit/detect",
+        "fields": { "tree_id": "t-1" },
+        "files": [["file", "f.jpg"]]
+      }
+    },
+    {
+      "name": "fruit_candidates sends the tree and the four box numbers",
+      "method": "fruit_candidates",
+      "args": { "image": { "$file": "f.jpg" }, "tree_id": "t-1", "bbox": [10, 20, 30, 40] },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/fruit/candidates",
+        "fields": {
+          "tree_id": "t-1",
+          "bbox_x": "10",
+          "bbox_y": "20",
+          "bbox_w": "30",
+          "bbox_h": "40"
+        },
+        "files": [["file", "f.jpg"]]
+      }
+    },
+    {
+      "name": "fruit_candidates without a tree raises BEFORE the photo is uploaded",
+      "method": "fruit_candidates",
+      "args": { "image": { "$file": "f.jpg" } },
+      "expect": {},
+      "throws": true
+    },
+    {
+      "name": "list_fruits filters by tree in the query string",
+      "method": "list_fruits",
+      "args": { "tree_id": "t-1" },
+      "expect": { "verb": "GET", "path": "/api/fruit/list", "query": { "tree_id": "t-1" } }
+    },
+    {
+      "name": "get_fruit names the fruit in the path",
+      "method": "get_fruit",
+      "args": { "fruit_id": "ORI-FRUIT-0A1B2C3D" },
+      "expect": { "verb": "GET", "path": "/api/fruit/ORI-FRUIT-0A1B2C3D" }
+    },
+    {
+      "name": "fruit_views names the fruit in the path",
+      "method": "fruit_views",
+      "args": { "fruit_id": "ORI-FRUIT-0A1B2C3D" },
+      "expect": { "verb": "GET", "path": "/api/fruit/ORI-FRUIT-0A1B2C3D/views" }
+    },
+    {
+      "name": "set_fruit_status uses PATCH with the status as a form field, not JSON",
+      "method": "set_fruit_status",
+      "args": { "fruit_id": "ORI-FRUIT-0A1B2C3D", "status": "harvested" },
+      "expect": {
+        "verb": "PATCH",
+        "path": "/api/fruit/ORI-FRUIT-0A1B2C3D/status",
+        "fields": { "status": "harvested" }
+      }
+    },
+    {
+      "name": "delete_fruit uses DELETE",
+      "method": "delete_fruit",
+      "args": { "fruit_id": "ORI-FRUIT-0A1B2C3D" },
+      "expect": { "verb": "DELETE", "path": "/api/fruit/ORI-FRUIT-0A1B2C3D" }
+    },
+    {
+      "name": "fruit_model3d names the fruit in the path",
+      "method": "fruit_model3d",
+      "args": { "fruit_id": "ORI-FRUIT-0A1B2C3D" },
+      "expect": { "verb": "GET", "path": "/api/fruit/ORI-FRUIT-0A1B2C3D/model3d" }
+    },
+    {
+      "name": "rename_animal sends the individual and the new name",
+      "method": "rename_animal",
+      "args": { "animal_did": "did:phoenix:c7", "name": "Cow 12" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/animal/rename",
+        "fields": { "animal_did": "did:phoenix:c7", "name": "Cow 12" }
+      }
+    },
+    {
+      "name": "verify_animal sends the individual and one photo under image",
+      "method": "verify_animal",
+      "args": { "animal_did": "did:phoenix:c7", "image": { "$file": "cow.jpg" } },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/animal/verify",
+        "fields": { "animal_did": "did:phoenix:c7" },
+        "files": [["image", "cow.jpg"]]
+      }
+    },
+    {
+      "name": "get_animal escapes the decentralised identifier in the path",
+      "method": "get_animal",
+      "args": { "animal_did": "did:phoenix:c7" },
+      "expect": { "verb": "GET", "path": "/api/animal/did%3Aphoenix%3Ac7" }
+    },
+    {
+      "name": "delete_animal uses DELETE",
+      "method": "delete_animal",
+      "args": { "animal_did": "did:phoenix:c7" },
+      "expect": { "verb": "DELETE", "path": "/api/animal/did%3Aphoenix%3Ac7" }
+    },
+    {
+      "name": "animal_model3d names the individual in the path",
+      "method": "animal_model3d",
+      "args": { "animal_did": "did:phoenix:c7" },
+      "expect": { "verb": "GET", "path": "/api/animal/did%3Aphoenix%3Ac7/model3d" }
+    },
+    {
+      "name": "detect_animal_species without a photo uploads no file",
+      "method": "detect_animal_species",
+      "args": { "farm_id": "f-1" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/animal/detect",
+        "fields": { "farm_id": "f-1" },
+        "files": []
+      }
+    },
+    {
+      "name": "detect_animal_species with a photo sends it under image",
+      "method": "detect_animal_species",
+      "args": { "farm_id": "f-1", "image": { "$file": "cow.jpg" } },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/animal/detect",
+        "fields": { "farm_id": "f-1" },
+        "files": [["image", "cow.jpg"]]
+      }
+    },
+    {
+      "name": "animal_drift_report asks by farm in the query string",
+      "method": "animal_drift_report",
+      "args": { "farm_id": "f-1" },
+      "expect": { "verb": "GET", "path": "/api/animal/drift/report", "query": { "farm_id": "f-1" } }
+    },
+    {
+      "name": "scan_species sends every photo under files",
+      "method": "scan_species",
+      "args": { "images": [{ "$file": "a.jpg" }, { "$file": "b.jpg" }] },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/scan",
+        "files": [["files", "a.jpg"], ["files", "b.jpg"]]
+      }
+    },
+    {
+      "name": "confirm_species sends the token and the chosen species",
+      "method": "confirm_species",
+      "args": { "scan_token": "st-1", "species": "sau_rieng" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/scan/confirm",
+        "fields": { "scan_token": "st-1", "species": "sau_rieng" }
+      }
+    },
+    {
+      "name": "record_population_count sends JSON and leaves out what it was not given",
+      "method": "record_population_count",
+      "args": { "farm_id": "f-1", "zone_id": "z-1", "zone_name": "Barn A", "count": 42 },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/population/count",
+        "json": { "farm_id": "f-1", "zone_id": "z-1", "zone_name": "Barn A", "count": 42 }
+      }
+    },
+    {
+      "name": "population_dashboard names the farm in the path",
+      "method": "population_dashboard",
+      "args": { "farm_id": "f-1" },
+      "expect": { "verb": "GET", "path": "/api/population/farm/f-1" }
+    },
+    {
+      "name": "population_alerts names the farm in the path",
+      "method": "population_alerts",
+      "args": { "farm_id": "f-1" },
+      "expect": { "verb": "GET", "path": "/api/population/alerts/f-1" }
+    },
+    {
+      "name": "entity_did keeps the entity type raw and escapes the identifier",
+      "method": "entity_did",
+      "args": { "entity_type": "tree", "entity_id": "t 1" },
+      "expect": { "verb": "GET", "path": "/api/tree/t%201/did" }
+    },
+    {
+      "name": "request_entity_did posts with no body",
+      "method": "request_entity_did",
+      "args": { "entity_type": "fruit", "entity_id": "ORI-FRUIT-0A1B2C3D" },
+      "expect": { "verb": "POST", "path": "/api/fruit/ORI-FRUIT-0A1B2C3D/did/request" }
+    },
+    {
+      "name": "submit_entity_did sends the owner signature as a form field",
+      "method": "submit_entity_did",
+      "args": { "entity_type": "farm", "entity_id": "f-1", "owner_signature": "MEYCIQ==" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/farm/f-1/did/submit",
+        "fields": { "owner_signature": "MEYCIQ==" }
+      }
+    },
+    {
+      "name": "magic_tasks reads the static task table",
+      "method": "magic_tasks",
+      "args": {},
+      "expect": { "verb": "GET", "path": "/api/magic/tasks" }
+    },
+    {
+      "name": "send_feedback sends the note and its context",
+      "method": "send_feedback",
+      "args": { "note": "the map is upside down", "context": "farm_map" },
+      "expect": {
+        "verb": "POST",
+        "path": "/api/feedback",
+        "fields": { "note": "the map is upside down", "context": "farm_map" }
+      }
     }
   ]
 }

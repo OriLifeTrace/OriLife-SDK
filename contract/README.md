@@ -18,7 +18,8 @@ declare an endpoint that is not recorded here.
 regenerate and `tools/generate.py --check` goes red; forget the cases and the coverage test goes
 red in both languages.
 
-**Change how a value is encoded** (compact JSON, bounding box, farm centre) → edit `python/orilife/_wire.py` AND `javascript/src/wire.js`, then add a case to
+**Change how a value is encoded** (compact JSON, bounding box, farm centre, comma lists, JSON
+bodies that leave out absent options or keep a caller's `null`) → edit `python/orilife/_wire.py` AND `javascript/src/wire.js`, then add a case to
 `conformance.json` that reaches both. The two `wire` files are the only place still written twice
 by hand; `conformance.json` is what keeps them equal.
 

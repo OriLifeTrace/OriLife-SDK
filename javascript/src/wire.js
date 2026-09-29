@@ -78,6 +78,39 @@ export function encodeContainers(fields) {
 }
 
 /**
+ * An array as the ONE comma-separated string some endpoints expect (`'0,2,5'`). A string passes
+ * through untouched; an empty value stays empty so the field is left out. The Python twin exists
+ * because Python would otherwise send `'[0, 2, 5]'`.
+ */
+export function csvField(value) {
+  if (Array.isArray(value)) return value.map((v) => String(v)).join(',');
+  return value;
+}
+
+/**
+ * A JSON body without the optional keys that were left out. `JSON.stringify` already drops
+ * `undefined`, but not `null` — and Python sends `null` for both, so without this the two
+ * languages would put different bodies on the wire.
+ */
+export function dropEmpty(body) {
+  const out = {};
+  for (const [k, v] of Object.entries(body)) if (v !== undefined && v !== null) out[k] = v;
+  return out;
+}
+
+/**
+ * A caller-built object sent AS the JSON body, keys and `null` values kept as given — the presence
+ * of a key carries meaning of its own there (absent = keep, `null` = delete). Anything but a plain
+ * object throws before sending.
+ */
+export function jsonObject(value, method) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`${method}() takes an object as its JSON body`);
+  }
+  return { ...value };
+}
+
+/**
  * A required argument that is missing throws AT ONCE, before any image is uploaded.
  *
  * In Python the language does this itself (keyword-only parameters without a default). In

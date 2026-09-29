@@ -147,8 +147,57 @@ Read these before your first call — they are where nearly every integration tr
 
 **There is no sandbox.** `signup()` creates a real account on `https://api.orilife.io`, and data
 you enroll is real data. Use a throwaway username while you are exploring, and delete it when you
-are done (`GET /api/account/data` previews what would be deleted, `POST /api/account/delete`
-performs it).
+are done (`account_data()` / `GET /api/account/data` previews what would be deleted,
+`delete_account()` / `POST /api/account/delete` performs it).
+
+---
+
+## Beyond identification
+
+The same client covers the rest of what a farm app needs. Every method below is live on
+`https://api.orilife.io`; the full list, with the exact path and fields of each, is generated into
+[contract/METHODS.md](contract/METHODS.md).
+
+**Sign in with a PhoenixKey DID** instead of a password. Two steps: ask for a challenge, sign it on
+the device with the DID's key (ECDSA P-256, DER, base64), send it back. The token that comes back is
+the same kind `login()` returns.
+
+```python
+ch = client.did_challenge()                   # {"ok": True, "challenge": "...", "ttl": 300}
+signature = sign_on_device(ch["challenge"])   # your PhoenixKey integration, never the server
+client.login_with_did("did:phoenix:...", ch["challenge"], signature)
+```
+
+**Care log and withdrawal.** Read the label, log the spray, then ask whether the tree may be
+harvested. `safe` has **three** states: `True` (allowed), `False` (still in the withdrawal period)
+and `None` (the server cannot tell — block, and show `advice`). Branch on `safe is True`, never on
+`safe is not False`.
+
+```python
+found = client.match_care_product(text="Ridomil Gold 68WG", scope="sau_rieng")
+if found.get("banned"):                   # a banned or restricted active ingredient on the label
+    show(found["message"])                # the server's sentence says what to do; stop here
+# `ambiguous: true` means the order is not an answer: let the person pick from the candidates.
+product_id = person_picks(found["candidates"])["product_id"]
+client.log_care("tree", tree_id, product_id, dose="20ml/8L", client_event_id=press_id)
+
+w = client.withdrawal_status("tree", tree_id)
+may_harvest = w["safe"] is True                   # False and None both mean: do not harvest yet
+```
+
+**Share a private farm or tree** with another account, read-only, and take it back later.
+
+```python
+who = client.resolve_account("worker_1")               # exact username -> owner reference
+g = client.create_grant(who["owner"], "farm", farm_id, ["read_private"], ttl_days=30)
+client.list_grants()                                   # what you gave and what you received
+client.revoke_grant(g["grant"]["grant_id"])
+```
+
+Also covered: residue interpretation against a market's limits (`interpret_residue`), renaming,
+moving and deleting trees, visibility and the public card, orchard maps and layouts, 3D models,
+fruit and animal records, the species gate, livestock population counts, asset DIDs, and the task
+table (`magic_tasks`).
 
 ---
 

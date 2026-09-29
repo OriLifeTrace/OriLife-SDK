@@ -222,6 +222,42 @@ cannot have a timeline: writing the first event would otherwise be a way to clai
 somebody else's tree. Anchoring costs money on chain and is the owner's decision — the server
 suggests it with `suggest_anchor`, it never does it by itself.
 
+**DID sign-in, care, sharing and the rest**
+
+| Group | Methods |
+|---|---|
+| DID sign-in and account | `did_challenge` · `login_with_did` · `account_data` · `delete_account` · `resolve_account` |
+| Sharing | `create_grant` · `list_grants` · `revoke_grant` |
+| Care and residue | `match_care_product` · `log_care` · `list_care_events` · `delete_care_event` · `withdrawal_status` · `list_care_products` · `list_banned_substances` · `interpret_residue` |
+| Managing trees | `rename_tree` · `delete_tree` · `update_tree_location` · `set_tree_visibility` · `set_tree_farm` · `set_tree_position` · `clear_tree_position` · `set_tree_species` · `add_tree_marker` · `tree_views` · `remove_tree_views` · `tree_drift` · `capture_guidance` · `tree_growth` · `get_tree_profile` · `update_tree_profile` · `add_tree_video` · `add_fruit_video` |
+| Maps and 3D | `farm_map` · `farm_layout` · `tree_layout` · `tree_model3d` · `public_tree_model3d` · `fruit_model3d` · `animal_model3d` |
+| Fruit | `detect_fruit` · `fruit_candidates` · `list_fruits` · `get_fruit` · `fruit_views` · `set_fruit_status` · `delete_fruit` |
+| Animals and livestock | `rename_animal` · `verify_animal` · `get_animal` · `delete_animal` · `detect_animal_species` · `animal_drift_report` · `record_population_count` · `population_dashboard` · `population_alerts` |
+| Species gate | `scan_species` · `confirm_species` |
+| Asset DID | `entity_did` · `request_entity_did` · `submit_entity_did` |
+| Other | `magic_tasks` · `send_feedback` |
+
+Exact paths and fields for each: [`contract/METHODS.md`](../contract/METHODS.md).
+
+```python
+# Sign in with a PhoenixKey DID: the challenge is signed on the device, never on the server.
+ch = client.did_challenge()
+client.login_with_did(did, ch["challenge"], sign_on_device(ch["challenge"]))
+
+# Care: read the label, log the spray, then ask whether harvest is allowed.
+found = client.match_care_product(text="Ridomil Gold 68WG", scope="sau_rieng")
+if found.get("banned"):
+    show(found["message"])                  # banned or restricted ingredient on the label
+product_id = person_picks(found["candidates"])["product_id"]
+client.log_care("tree", tree_id, product_id, client_event_id=press_id)
+may_harvest = client.withdrawal_status("tree", tree_id)["safe"] is True   # False and None: not yet
+
+# Share a private farm read-only for 30 days, then take it back.
+who = client.resolve_account("worker_1")
+g = client.create_grant(who["owner"], "farm", farm_id, ["read_private"], ttl_days=30)
+client.revoke_grant(g["grant"]["grant_id"])
+```
+
 Anything not wrapped in a method is one line away, and the wrapping adds nothing you lose by
 skipping it:
 

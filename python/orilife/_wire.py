@@ -29,8 +29,8 @@ import uuid
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 __all__ = [
-    "FileArg", "_as_file", "_as_file_list", "_one_file", "_bbox_fields", "_center_json",
-    "_encode_containers", "_multipart", "_quote",
+    "FileArg", "_as_file", "_as_file_list", "_one_file", "_bbox_fields", "_center_json", "_csv",
+    "_drop_empty", "_encode_containers", "_json_object", "_multipart", "_quote",
 ]
 
 FileArg = Union[str, bytes, Tuple[str, bytes], Tuple[str, bytes, str]]
@@ -63,8 +63,10 @@ def _as_file_list(images: Union[FileArg, Iterable[FileArg]]) -> List[FileArg]:
 
     A path is a `str`, and a `str` is iterable — so treating the argument as a sequence without
     this guard turns "photo.jpg" into nine one-character files. Stop it here instead of uploading
-    junk.
+    junk. `None` (an optional upload left out) is an empty list, as in JavaScript.
     """
+    if images is None:
+        return []
     if isinstance(images, (str, bytes, tuple)):
         return [images]
     return list(images)
@@ -126,6 +128,39 @@ def _encode_containers(fields: Dict[str, Any]) -> Dict[str, Any]:
     """
     return {k: (_compact_json(v) if isinstance(v, (list, dict, tuple)) else v)
             for k, v in fields.items() if v is not None}
+
+
+def _csv(value: Any) -> Any:
+    """A list as the ONE comma-separated string some endpoints expect (`"0,2,5"`).
+
+    A list handed straight to the form builder becomes `"[0, 2, 5]"` in Python and `"0,2,5"` in
+    JavaScript — the server parses the second and refuses the first. A string passes through
+    untouched; `None` stays `None` so the field is left out.
+    """
+    if isinstance(value, (list, tuple)):
+        return ",".join(str(v) for v in value)
+    return value
+
+
+def _drop_empty(body: Dict[str, Any]) -> Dict[str, Any]:
+    """A JSON body without the optional keys that were left out.
+
+    Left in, they travel as `null` from Python and vanish from JavaScript (`JSON.stringify` drops
+    `undefined`), so the two languages send different bodies — and a server field typed as a
+    boolean answers `null` with 422.
+    """
+    return {k: v for k, v in body.items() if v is not None}
+
+
+def _json_object(value: Any, method: str) -> Dict[str, Any]:
+    """A caller-built mapping sent AS the JSON body, keys and `None` values kept as given.
+
+    Used where the presence of a key carries meaning of its own (absent = keep, `None` = delete),
+    so nothing here may drop or add a key. Anything but a mapping raises before sending.
+    """
+    if not isinstance(value, dict):
+        raise TypeError(f"{method}() takes a mapping as its JSON body, not {type(value).__name__}")
+    return dict(value)
 
 
 def _multipart(fields: Dict[str, Any],
