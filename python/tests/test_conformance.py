@@ -1,13 +1,13 @@
-"""Chạy bộ ca DÙNG CHUNG `contract/conformance.json` trên bản cài Python.
+"""Run the SHARED cases in `contract/conformance.json` against the Python implementation.
 
-Bộ kiểm riêng của mỗi ngôn ngữ chỉ chứng minh bên đó tự nhất quán với chính nó. Hai bên tự nhất
-quán mà lệch nhau thì vẫn xanh cả hai — đó đúng là chỗ ba lỗi thật đã đi qua (xem đầu tệp
-`orilife/_wire.py`). Tệp này và bản song sinh `javascript/test/conformance.test.mjs` chạy CÙNG một
-danh sách ca, nên một bên lệch là một bên đỏ.
+Each language's own suite only proves that side agrees with itself. Two sides that agree with
+themselves and disagree with each other stay green on both — exactly the gap three real bugs went
+through (see the top of `orilife/_wire.py`). This file and its twin
+`javascript/test/conformance.test.mjs` run the SAME list of cases, so a side that drifts goes red.
 
-Ranh giới đo: chốt ở chỗ hàm gọi ra `request()` — phần ÁNH XẠ (đường, tên trường, cách mã hoá).
-Tầng vận chuyển bên dưới (dựng multipart, chờ 429, phân loại lỗi) do `test_client.py` giữ. Xanh ở
-đây KHÔNG có nghĩa là đã kiểm hết.
+Measurement boundary: pinned where a method calls `request()` — the MAPPING (path, field names,
+encoding). The transport underneath (building multipart, waiting out a 429, typing errors) is held
+by `test_client.py`. Green here does NOT mean everything is tested.
 """
 from __future__ import annotations
 
@@ -27,12 +27,12 @@ CASES = load("conformance.json")["cases"]
 SPEC = {m["name"]: m for m in CONTRACT["methods"]}
 GENERATED = [m["name"] for m in CONTRACT["methods"] if m.get("generated", True)]
 
-# Cùng một khối byte cho mọi tệp giả — nội dung không phải thứ đang đo, tên trường mới là.
+# The same bytes for every fake file — the content is not what is measured, the field name is.
 _BLOB = b"\x01\x02\x03"
 
 
 class _Recorder(Client):
-    """Client thật, chỉ thay tầng vận chuyển bằng một cuốn sổ."""
+    """The real client, with only the transport swapped for a notebook."""
 
     def __init__(self):
         super().__init__("https://x.test", token="k", max_retries=0)
@@ -53,22 +53,23 @@ class _Recorder(Client):
 
 
 def _clean(mapping):
-    """Đúng cái đi lên dây: bỏ giá trị rỗng, ép chuỗi phần còn lại."""
+    """Exactly what goes on the wire: drop empty values, stringify the rest."""
     return {k: str(v) for k, v in (mapping or {}).items() if v is not None}
 
 
 def _filename(item):
-    """Tên tệp đọc ra từ thứ đã đưa vào — bộ `(tên, byte)` hoặc chuỗi đường dẫn."""
+    """The file name read back from what was passed in — a `(name, bytes)` tuple or a path string."""
     return item[0] if isinstance(item, tuple) else item
 
 
 def _materialise(value):
-    """Chỗ giữ tệp trong ca kiểm thành một tệp thật của ngôn ngữ này.
+    """Turn a file placeholder in a test case into a real file of this language.
 
-    `$single_file` cố ý dựng thành CHUỖI đường dẫn trần, vì đó vừa là lối tự nhiên nhất để đưa
-    một tệp lẻ vào bản Python, vừa là đúng cái đầu vào làm lộ lỗi duyệt-chuỗi-thành-ký-tự. Dựng
-    nó thành bộ như `$file` thì ca này xanh dưới chính đột biến nó mang tên — đo được ngày
-    2026-09-08: gỡ hàng rào chuỗi trong `_as_file_list` mà 57/57 ca vẫn xanh.
+    `$single_file` is deliberately built as a bare path STRING, because that is both the most
+    natural way to pass a single file to the Python client and exactly the input that exposes the
+    iterate-a-string-into-characters bug. Build it as a tuple like `$file` and the case stays green
+    under the very mutant it is named after — measured 2026-09-08: with the string guard removed
+    from `_as_file_list`, 57/57 cases were still green.
     """
     if isinstance(value, dict) and "$file" in value:
         return (value["$file"], _BLOB)
@@ -80,7 +81,7 @@ def _materialise(value):
 
 
 def _invoke(client, case):
-    """Dựng lệnh gọi từ đặc tả tham số trong hợp đồng, không đoán theo tên ca."""
+    """Build the call from the argument spec in the contract, never guess from the case name."""
     spec = SPEC[case["method"]]
     args = {k: _materialise(v) for k, v in case["args"].items()}
     positional = [a for a in spec.get("args", []) if a.get("positional")]
@@ -94,7 +95,7 @@ def _invoke(client, case):
             call_args.append(None)
         else:
             raise AssertionError(
-                f"ca {case['name']!r} thiếu tham số bắt buộc {arg['name']!r}")
+                f"case {case['name']!r} is missing required argument {arg['name']!r}")
 
     call_kwargs = {}
     for arg in optional:
@@ -113,14 +114,14 @@ def test_the_wire_shape_is_the_one_the_contract_declares(case):
     if case.get("throws"):
         with pytest.raises((ValueError, TypeError)):
             _invoke(client, case)
-        # Ném là chưa đủ: nó phải ném TRƯỚC khi có byte nào rời máy. Ném sau khi đã tải ảnh lên
-        # trên đường truyền yếu là cả phút chờ để nhận một lỗi lẽ ra biết trước.
-        assert client.seen is None, "phải chặn trước khi gửi, không phải sau"
+        # Raising is not enough: it must raise BEFORE any byte leaves the machine. Raising after
+        # the images went up over a weak link is a full minute of waiting for a known error.
+        assert client.seen is None, "must refuse before sending, not after"
         return
 
     _invoke(client, case)
     seen = client.seen
-    assert seen is not None, "hàm không gọi ra request() lần nào"
+    assert seen is not None, "the method never called request()"
 
     want = case["expect"]
     assert seen["verb"] == want["verb"]
@@ -142,16 +143,16 @@ def test_the_wire_shape_is_the_one_the_contract_declares(case):
 
 
 def test_every_generated_method_has_at_least_one_case():
-    """Một cửa không có ca nào là một cửa không ai canh.
+    """A method without a case is a method nobody guards.
 
-    Cổng này ở đây chứ không ở bộ sinh: bộ sinh mà tự chấm điểm cho mình thì nó vừa ra đề vừa
-    chấm bài.
+    This gate lives here and not in the generator: a generator that grades itself both sets the
+    exam and marks it.
     """
     covered = {c["method"] for c in CASES}
     missing = sorted(set(GENERATED) - covered)
-    assert not missing, f"chưa có ca kiểm dùng chung cho: {missing}"
+    assert not missing, f"no shared case yet for: {missing}"
 
 
 def test_every_case_names_a_method_that_exists():
     unknown = sorted({c["method"] for c in CASES} - set(SPEC))
-    assert not unknown, f"ca kiểm gọi cửa không có trong hợp đồng: {unknown}"
+    assert not unknown, f"a case calls a method missing from the contract: {unknown}"

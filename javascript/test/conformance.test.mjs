@@ -1,13 +1,14 @@
 /**
- * Chạy bộ ca DÙNG CHUNG `contract/conformance.json` trên bản cài JavaScript.
+ * Run the SHARED cases in `contract/conformance.json` against the JavaScript implementation.
  *
- * Bộ kiểm riêng của mỗi ngôn ngữ chỉ chứng minh bên đó tự nhất quán với chính nó. Hai bên tự nhất
- * quán mà lệch nhau thì vẫn xanh cả hai — đó đúng là chỗ ba lỗi thật đã đi qua (xem đầu tệp
- * `python/orilife/_wire.py`). Tệp này và bản song sinh `python/tests/test_conformance.py` chạy
- * CÙNG một danh sách ca, nên một bên lệch là một bên đỏ.
+ * Each language's own suite only proves that side agrees with itself. Two sides that agree with
+ * themselves and disagree with each other stay green on both — exactly the gap three real bugs
+ * went through (see the top of `python/orilife/_wire.py`). This file and its twin
+ * `python/tests/test_conformance.py` run the SAME list of cases, so a side that drifts goes red.
  *
- * Ranh giới đo: chốt ở chỗ hàm gọi ra `request()` — phần ÁNH XẠ (đường, tên trường, cách mã hoá).
- * Tầng vận chuyển bên dưới do `client.test.mjs` giữ. Xanh ở đây KHÔNG có nghĩa là đã kiểm hết.
+ * Measurement boundary: pinned where a method calls `request()` — the MAPPING (path, field names,
+ * encoding). The transport underneath is held by `client.test.mjs`. Green here does NOT mean
+ * everything is tested.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -20,14 +21,14 @@ const CASES = load('conformance.json').cases;
 const SPEC = Object.fromEntries(CONTRACT.methods.map((m) => [m.name, m]));
 const GENERATED = CONTRACT.methods.filter((m) => m.generated !== false).map((m) => m.name);
 
-// Cùng một khối byte cho mọi tệp giả — nội dung không phải thứ đang đo, tên trường mới là.
+// The same bytes for every fake file — the content is not what is measured, the field name is.
 const BLOB = new Uint8Array([1, 2, 3]);
 
 const camel = (snake) => snake.split('_')
   .map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)))
   .join('');
 
-/** Đúng cái đi lên dây: bỏ giá trị rỗng, ép chuỗi phần còn lại. */
+/** Exactly what goes on the wire: drop empty values, stringify the rest. */
 function clean(mapping) {
   const out = {};
   for (const [k, v] of Object.entries(mapping || {})) {
@@ -37,11 +38,12 @@ function clean(mapping) {
 }
 
 /**
- * Chỗ giữ tệp trong ca kiểm thành một tệp thật của ngôn ngữ này.
+ * Turn a file placeholder in a test case into a real file of this language.
  *
- * `$single_file` là MỘT tệp lẻ không bọc trong mảng. Bên Python nó dựng thành chuỗi đường dẫn vì
- * đó là chỗ ngôn ngữ đó hỏng; bên này chuỗi không phải kiểu tệp hợp lệ, nên lối tự nhiên là một
- * đối tượng tệp — và nó vẫn chạm đúng lỗi của bên này: gọi `.map` trên thứ không phải mảng.
+ * `$single_file` is ONE file not wrapped in an array. On the Python side it becomes a path string,
+ * because that is where that language breaks; here a string is not a valid file type, so the
+ * natural form is a file object — and it still reaches this side's bug: calling `.map` on something
+ * that is not an array.
  */
 function materialise(value) {
   if (Array.isArray(value)) return value.map(materialise);
@@ -54,7 +56,7 @@ function materialise(value) {
   return value;
 }
 
-/** Client thật, chỉ thay tầng vận chuyển bằng một cuốn sổ. */
+/** The real client, with only the transport swapped for a notebook. */
 class Recorder extends Client {
   constructor() {
     super('https://x.test', { token: 'k', maxRetries: 0 });
@@ -77,7 +79,7 @@ class Recorder extends Client {
   }
 }
 
-/** Dựng lệnh gọi từ đặc tả tham số trong hợp đồng, không đoán theo tên ca. */
+/** Build the call from the argument spec in the contract, never guess from the case name. */
 function invoke(client, testCase) {
   const spec = SPEC[testCase.method];
   const args = Object.fromEntries(
@@ -92,7 +94,7 @@ function invoke(client, testCase) {
   for (const arg of positional) {
     if (arg.name in args) callArgs.push(args[arg.name]);
     else if (arg.kind === 'json_payload') callArgs.push(null);
-    else throw new Error(`ca ${testCase.name}: thiếu tham số bắt buộc ${arg.name}`);
+    else throw new Error(`case ${testCase.name}: missing required argument ${arg.name}`);
   }
   if (plain.length) {
     const opts = {};
@@ -113,15 +115,15 @@ for (const testCase of CASES) {
         async () => invoke(client, testCase),
         (e) => e instanceof TypeError || e instanceof RangeError,
       );
-      // Ném là chưa đủ: nó phải ném TRƯỚC khi có byte nào rời máy. Ném sau khi đã tải ảnh lên
-      // trên đường truyền yếu là cả phút chờ để nhận một lỗi lẽ ra biết trước.
-      assert.equal(client.seen, null, 'phải chặn trước khi gửi, không phải sau');
+      // Throwing is not enough: it must throw BEFORE any byte leaves the machine. Throwing after
+      // the images went up over a weak link is a full minute of waiting for a known error.
+      assert.equal(client.seen, null, 'must refuse before sending, not after');
       return;
     }
 
     await invoke(client, testCase);
     const seen = client.seen;
-    assert.ok(seen, 'hàm không gọi ra request() lần nào');
+    assert.ok(seen, 'the method never called request()');
 
     const want = testCase.expect;
     assert.equal(seen.verb, want.verb);
@@ -132,7 +134,7 @@ for (const testCase of CASES) {
     if ('json' in want) assert.deepEqual(seen.json, want.json);
     if ('timeout_seconds_at_least' in want) {
       assert.ok(seen.timeout >= want.timeout_seconds_at_least * 1000,
-        `hạn chờ ${seen.timeout}ms nhỏ hơn mức hợp đồng đòi`);
+        `timeout ${seen.timeout}ms is below what the contract requires`);
     }
 
     for (const [key, value] of Object.entries(testCase.after || {})) {
@@ -141,15 +143,15 @@ for (const testCase of CASES) {
   });
 }
 
-test('mọi cửa sinh ra đều có ít nhất một ca kiểm dùng chung', () => {
-  // Một cửa không có ca nào là một cửa không ai canh. Cổng này ở đây chứ không ở bộ sinh: bộ sinh
-  // mà tự chấm điểm cho mình thì nó vừa ra đề vừa chấm bài.
+test('every generated method has at least one shared case', () => {
+  // A method without a case is a method nobody guards. This gate lives here and not in the
+  // generator: a generator that grades itself both sets the exam and marks it.
   const covered = new Set(CASES.map((c) => c.method));
   const missing = GENERATED.filter((name) => !covered.has(name));
-  assert.deepEqual(missing, [], `chưa có ca kiểm dùng chung cho: ${missing.join(', ')}`);
+  assert.deepEqual(missing, [], `no shared case yet for: ${missing.join(', ')}`);
 });
 
-test('mọi ca kiểm đều gọi một cửa có thật trong hợp đồng', () => {
+test('every case calls a method that exists in the contract', () => {
   const unknown = [...new Set(CASES.map((c) => c.method))].filter((name) => !SPEC[name]);
-  assert.deepEqual(unknown, [], `ca kiểm gọi cửa không có trong hợp đồng: ${unknown.join(', ')}`);
+  assert.deepEqual(unknown, [], `a case calls a method missing from the contract: ${unknown.join(', ')}`);
 });

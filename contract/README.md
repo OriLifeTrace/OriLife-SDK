@@ -1,62 +1,68 @@
-# `contract/` — một nguồn, nhiều bản cài
+# `contract/` — one source, several implementations
 
-Thư mục này là **nguồn sự thật của SDK**. Mọi bản cài (Python, JavaScript, và bất kỳ ngôn ngữ nào
-thêm sau) đều sinh ra từ đây hoặc bị kiểm bằng đây. Không bản cài nào được tự khai một cửa mà chỗ
-này không có.
+This directory is **the SDK's source of truth**. Every implementation (Python, JavaScript, and any
+language added later) is either generated from it or tested against it. No implementation may
+declare an endpoint that is not recorded here.
 
-| Tệp | Là gì | Ai đọc |
+| File | What it is | Who reads it |
 |---|---|---|
-| `methods.json` | Bảng cửa của SDK: tên hàm, động từ, đường, tên trường, tệp gửi dưới trường nào, có được gửi lại khi hỏng không | `tools/generate.py`, cả hai bộ kiểm hợp-lệ |
-| `conformance.json` | Bộ ca kiểm dùng chung: gọi hàm này với tham số này thì đúng cái gì phải đi lên dây | `python/tests/test_conformance.py`, `javascript/test/conformance.test.mjs` |
-| `vectors.json` | Bộ số kiểm chứng: mã thực thể, JSON chuẩn tắc, băm bản ghi | `test_verify.py`, `verify.test.mjs`, và mọi bản cài mới |
-| `METHODS.md` | Bảng tra cho người đọc — **sinh tự động**, đừng sửa tay | người |
+| `methods.json` | The SDK's endpoint table: method name, verb, path, field names, which field each file travels under, whether a failed call may be retried | `tools/generate.py`, both conformance suites |
+| `conformance.json` | The shared test cases: call this method with these arguments and exactly this must go on the wire | `python/tests/test_conformance.py`, `javascript/test/conformance.test.mjs` |
+| `vectors.json` | The verification vectors: entity codes, canonical JSON, record hashes | `test_verify.py`, `verify.test.mjs`, and every new implementation |
+| `METHODS.md` | The lookup table for people — **generated**, do not edit by hand | people |
 
-## Sửa gì thì làm gì
+## What to do for each kind of change
 
-**Thêm hoặc đổi một cửa** → sửa `methods.json`, chạy `python3 tools/generate.py`, thêm ca vào
-`conformance.json`, chạy hai bộ kiểm. Bỏ bước nào cũng có cổng bắt: quên sinh lại thì
-`tools/generate.py --check` đỏ; quên thêm ca thì phép kiểm phủ-cửa đỏ ở cả hai ngôn ngữ.
+**Add or change an endpoint** → edit `methods.json`, run `python3 tools/generate.py`, add cases to
+`conformance.json`, run both test suites. Every skipped step has a gate that catches it: forget to
+regenerate and `tools/generate.py --check` goes red; forget the cases and the coverage test goes
+red in both languages.
 
-**Sửa cách mã hoá một giá trị** (JSON gọn, khung bao, tâm vườn) → sửa `python/orilife/_wire.py` VÀ
-`javascript/src/wire.js`, rồi thêm một ca vào `conformance.json` chạm được cả hai. Hai tệp `wire`
-là chỗ duy nhất còn phải viết tay hai lần; `conformance.json` là thứ giữ chúng bằng nhau.
+**Change how a value is encoded** (compact JSON, bounding box, farm centre) → edit `python/orilife/_wire.py` AND `javascript/src/wire.js`, then add a case to
+`conformance.json` that reaches both. The two `wire` files are the only place still written twice
+by hand; `conformance.json` is what keeps them equal.
 
-**Đổi thuật toán băm** → `vectors.json` phải sinh lại từ chính mã đang chạy trên máy chủ, không
-gõ tay. Bản ghi đã neo lên chuỗi khối không được băm lại: xem `VERIFY.md`.
+**Change the hash algorithm** → `vectors.json` must be regenerated from the code that actually runs
+on the server, never typed by hand. Records already anchored on chain must not be re-hashed: see
+`VERIFY.md`.
 
-## Hai cổng, hai câu hỏi khác nhau — đừng gộp
+## Two gates, two different questions — do not merge them
 
-| Cổng | Hỏi gì | Cần mạng | Hỏng thì |
+| Gate | Asks | Needs network | On failure |
 |---|---|---|---|
-| `tools/generate.py --check` | mã sinh có khớp hợp đồng không | không | đỏ |
-| `tools/check_server_drift.py` | hợp đồng có khớp máy chủ đang chạy không | có | ba trạng thái: KHỚP / LỆCH / **KHÔNG ĐO ĐƯỢC** |
+| `tools/generate.py --check` | does the generated code match the contract | no | red |
+| `tools/check_server_drift.py` | does the contract match the running server | yes | three states: MATCH / DRIFT / **UNMEASURABLE** |
 
-Cổng thứ hai trả về ba trạng thái chứ không phải hai, và trạng thái "không đo được" kêu to hơn
-trạng thái "lệch". Một phép đo trả "ổn" đúng lúc nó không đo được gì thì màu xanh của nó vô nghĩa:
-nó không nói *ổn*, nó nói *tôi không biết* bằng giọng của *ổn*.
+The second gate returns three states, not two, and "unmeasurable" is louder than "drift". A
+measurement that reports "fine" exactly when it measured nothing makes its green meaningless: it
+does not say *fine*, it says *I do not know* in the voice of *fine*.
 
-## Vì sao thư mục này tồn tại
+## Why this directory exists
 
-Trước ngày 2026-09-08, `python/orilife/client.py` và `javascript/src/client.js` là hai bản chép
-tay của cùng một hợp đồng. Ba chỗ lệch đo được lúc gộp lại, không chỗ nào có phép kiểm nào bắt:
+Before 2026-09-08, `python/orilife/client.py` and `javascript/src/client.js` were two hand-written
+copies of the same contract. Three mismatches were measured when they were merged, and no test
+caught any of them:
 
-1. `create_farm(lat=10.762622, lon=106.660172)` gửi `center_json=[10.762622, 106.660172]` ở Python
-   và `[10.762622,106.660172]` ở JavaScript — khác một dấu cách là khác byte.
-2. `update_farm(boundary_json=[[10.7, 106.6]])` mã hoá JSON ở Python; ở JavaScript
-   `URLSearchParams` ép chuỗi thành `10.7,106.6` và máy chủ nhận một thứ không phải JSON.
-3. `identify_tree("photo.jpg")` ở Python duyệt CHUỖI thành từng ký tự rồi tải lên chín tệp một ký
-   tự. Không hàm nào ném.
+1. `create_farm(lat=10.762622, lon=106.660172)` sent `center_json=[10.762622, 106.660172]` from
+   Python and `[10.762622,106.660172]` from JavaScript — one space apart is different bytes.
+2. `update_farm(boundary_json=[[10.7, 106.6]])` JSON-encoded the value in Python; in JavaScript
+   `URLSearchParams` stringified it to `10.7,106.6` and the server received something that is not
+   JSON.
+3. `identify_tree("photo.jpg")` in Python iterated the STRING character by character and uploaded
+   nine one-character files. No function raised.
 
-Cả ba đều im lặng. Mỗi bên đều có bộ kiểm riêng và cả hai đều xanh — bộ kiểm riêng chỉ chứng minh
-một bên tự nhất quán với chính nó, nó không so hai bên với nhau. Đó là việc của `conformance.json`.
+All three were silent. Each side had its own test suite and both were green — a per-language suite
+only proves that one side agrees with itself; it never compares the two. That is the job of
+`conformance.json`.
 
-## Bộ ca kiểm phải phân biệt được HAI CỰC
+## Test cases must tell the TWO EXTREMES apart
 
-Viết một ca thì hỏi trước: *"đầu vào của ca này có phân biệt được hai bên đột biến không?"* — hỏi
-TRƯỚC câu "nó xanh hay đỏ". Ca xanh ở cả hai cực thì nó không kiểm gì.
+Before writing a case, ask: *"can the input of this case tell the two mutants apart?"* — ask it
+BEFORE asking "is it green or red". A case that is green at both extremes tests nothing.
 
-Đo được ngày 2026-09-08: ca *"một tệp lẻ không bọc trong danh sách"* ban đầu dựng đầu vào giống
-nhau cho cả hai ngôn ngữ, và khi gỡ hàng rào chuỗi trong `_as_file_list` thì 57/57 ca Python **vẫn
-xanh**. Ca ấy mang đúng tên của lỗi nó bỏ lọt. Nay nó dùng chỗ giữ `$single_file`, dựng thành
-chuỗi đường dẫn bên Python và đối tượng tệp bên JavaScript — hai lối dựng khác nhau là cố ý, vì
-mỗi ngôn ngữ hỏng theo một kiểu riêng ở đúng chỗ đó.
+Measured on 2026-09-08: the case *"a single file not wrapped in a list"* originally built the same
+input for both languages, and with the string guard removed from `_as_file_list` all 57/57 Python
+cases **stayed green**. The case carried the very name of the bug it let through. It now uses the
+`$single_file` placeholder, built as a bare path string in Python and as a file object in
+JavaScript — the two constructions differ on purpose, because each language breaks in its own way
+at exactly that spot.

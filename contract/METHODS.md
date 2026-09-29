@@ -1,4 +1,4 @@
-<!-- SINH TỰ ĐỘNG từ contract/methods.json — ĐỪNG SỬA TAY. -->
+<!-- GENERATED from contract/methods.json — DO NOT EDIT BY HAND. -->
 # Method map
 
 Generated from `contract/methods.json` v1.0.0 by `tools/generate.py`.

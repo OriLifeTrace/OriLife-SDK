@@ -504,7 +504,7 @@ That is the reason a sentence like this one cannot be the thing your code trusts
 3. `describe()` (the service descriptor) will raise `NotFoundError` on servers that do not ship it.
    That is the correct answer, not a bug.
 4. `tools/check_server_drift.py` compares `contract/methods.json` against the live
-   `/openapi.json` and reports **KHỚP / LỆCH / KHÔNG ĐO ĐƯỢC**. It runs in CI. That is what
+   `/openapi.json` and reports **MATCH / DRIFT / UNMEASURABLE**. It runs in CI. That is what
    noticing looks like when it is mechanical instead of hopeful.
 
 ---

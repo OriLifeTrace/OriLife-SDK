@@ -1,7 +1,7 @@
-"""SINH TỰ ĐỘNG từ contract/methods.json — ĐỪNG SỬA TAY.
+"""GENERATED from contract/methods.json — DO NOT EDIT BY HAND.
 
-Sửa hợp đồng rồi chạy `python3 tools/generate.py`. Sửa thẳng tệp này thì lần sinh sau mất hết,
-và CI (`tools/generate.py --check`) đỏ ngay ở commit đó.
+Edit the contract, then run `python3 tools/generate.py`. Edits made directly to this file are lost
+at the next generation, and CI (`tools/generate.py --check`) goes red on that very commit.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ CONTRACT_VERSION = "1.0.0"
 
 
 class GeneratedMethods:
-    """Mọi cửa API, sinh từ hợp đồng. `Client` kế thừa lớp này và cấp `request()`."""
+    """Every API endpoint, generated from the contract. `Client` inherits this class and provides `request()`."""
 
     request: Any
     timeout: float

@@ -1,8 +1,8 @@
-"""Đường tới `contract/` — MỘT nơi giữ, mọi bộ kiểm trỏ về đây.
+"""The path to `contract/` — ONE place holds it, every test suite points here.
 
-Trước đây bộ kiểm JavaScript đọc `../../python/tests/vectors.json`: gói JavaScript thò tay vào
-ruột gói Python. Xuất bản riêng một gói là đứt đường đó, mà không lệnh nào báo. Nay cả hai bên
-cùng trỏ vào `contract/`, không bên nào sở hữu dữ liệu của bên kia.
+The JavaScript suite used to read `../../python/tests/vectors.json`: the JavaScript package reached
+into the Python package's insides. Publishing either package on its own breaks that path, and no
+command reports it. Both sides now point at `contract/`, and neither owns the other's data.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ CONTRACT_DIR = os.path.normpath(
 
 
 def load(name: str):
-    """Đọc một tệp trong `contract/`. Thiếu tệp thì NÉM — đừng trả rỗng rồi chạy tiếp,
-    bộ kiểm 0 ca vẫn xanh và ai đọc cũng tưởng là đã kiểm."""
+    """Read one file in `contract/`. A missing file RAISES — never return empty and carry on: a
+    suite with 0 cases is still green, and everyone reading it believes something was tested."""
     with open(os.path.join(CONTRACT_DIR, name), encoding="utf-8") as fh:
         return json.load(fh)

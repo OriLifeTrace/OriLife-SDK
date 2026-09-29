@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Sinh mã khách từ `contract/methods.json` — MỘT nguồn, nhiều bản cài.
+"""Generate the client code from `contract/methods.json` — ONE source, several implementations.
 
-    python3 tools/generate.py           # ghi lại các tệp sinh
-    python3 tools/generate.py --check   # không ghi; đỏ nếu tệp trên đĩa lệch bản sinh
+    python3 tools/generate.py           # rewrite the generated files
+    python3 tools/generate.py --check   # write nothing; red if a file on disk differs
 
-Vì sao có tệp này. Trước đây `python/orilife/client.py` và `javascript/src/client.js` là hai bản
-chép tay của cùng một hợp đồng: sửa một cửa phải nhớ sửa hai chỗ, và không có gì kêu khi một bên
-lệch. Hai lỗi đo được ngay lúc dựng tệp này — `create_farm` gửi `[10.762, 106.66]` bên Python và
-`[10.762,106.66]` bên JavaScript (khác BYTE), `update_farm` mã hoá JSON cho mảng ở Python mà không
-làm thế ở JavaScript — đều là loại lỗi không test nào bắt được, vì mỗi bên tự kiểm chính mình.
+Why this file exists. `python/orilife/client.py` and `javascript/src/client.js` used to be two
+hand-written copies of the same contract: changing one endpoint meant remembering to change two
+places, and nothing complained when one side drifted. Two bugs were measured when this file was
+built — `create_farm` sent `[10.762, 106.66]` from Python and `[10.762,106.66]` from JavaScript
+(different BYTES), and `update_farm` JSON-encoded an array in Python but not in JavaScript — both
+the kind of bug no test catches, because each side only tests itself.
 
-Bản sinh được COMMIT vào kho, không sinh lúc cài. Ba lý do: đọc được bằng mắt, hiện lên trong
-`git diff` khi hợp đồng đổi, và không bắt người dùng có Python để cài gói JavaScript. Cổng chống
-trôi là `--check` chạy trong CI: quên sinh lại thì CI đỏ, không phải chờ ai đó phát hiện.
+The generated output is COMMITTED, not generated at install time. Three reasons: it can be read,
+it shows up in `git diff` when the contract changes, and nobody needs Python to install the
+JavaScript package. The drift gate is `--check` in CI: forget to regenerate and CI goes red,
+instead of waiting for someone to notice.
 """
 from __future__ import annotations
 
@@ -28,13 +30,14 @@ PY_OUT = os.path.join(ROOT, "python", "orilife", "_generated.py")
 JS_OUT = os.path.join(ROOT, "javascript", "src", "generated.js")
 MD_OUT = os.path.join(ROOT, "contract", "METHODS.md")
 
-BANNER_PY = '"""SINH TỰ ĐỘNG từ contract/methods.json — ĐỪNG SỬA TAY.\n\nSửa hợp đồng rồi chạy `python3 tools/generate.py`. Sửa thẳng tệp này thì lần sinh sau mất hết,\nvà CI (`tools/generate.py --check`) đỏ ngay ở commit đó.\n"""'
-BANNER_JS = ("/**\n * SINH TỰ ĐỘNG từ contract/methods.json — ĐỪNG SỬA TAY.\n *\n"
-             " * Sửa hợp đồng rồi chạy `python3 tools/generate.py`. Sửa thẳng tệp này thì lần sinh\n"
-             " * sau mất hết, và CI (`tools/generate.py --check`) đỏ ngay ở commit đó.\n */")
+BANNER_PY = '"""GENERATED from contract/methods.json — DO NOT EDIT BY HAND.\n\nEdit the contract, then run `python3 tools/generate.py`. Edits made directly to this file are lost\nat the next generation, and CI (`tools/generate.py --check`) goes red on that very commit.\n"""'
+BANNER_JS = ("/**\n * GENERATED from contract/methods.json — DO NOT EDIT BY HAND.\n *\n"
+             " * Edit the contract, then run `python3 tools/generate.py`. Edits made directly to this\n"
+             " * file are lost at the next generation, and CI (`tools/generate.py --check`) goes red on\n"
+             " * that very commit.\n */")
 
 
-# ── tên định danh ────────────────────────────────────────────────────────────────────────────
+# ── identifiers ──────────────────────────────────────────────────────────────────────────────────
 
 def camel(snake: str) -> str:
     head, *rest = snake.split("_")
@@ -45,7 +48,7 @@ def js_lit(value) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-# ── đọc hợp đồng ─────────────────────────────────────────────────────────────────────────────
+# ── reading the contract───────────────────────────────────────────────────────────────────────
 
 def load():
     with open(CONTRACT, encoding="utf-8") as fh:
@@ -54,7 +57,7 @@ def load():
 
 
 def split_args(method):
-    """Tách tham số thành (vị trí, tuỳ chọn). `center_pair_other` đi kèm bạn của nó."""
+    """Split the arguments into (positional, optional). `center_pair_other` travels with its pair."""
     args = method.get("args", [])
     positional = [a for a in args if a.get("positional")]
     optional = [a for a in args if not a.get("positional")]
@@ -62,9 +65,9 @@ def split_args(method):
 
 
 def wire_of(method):
-    """Ba rổ đi lên dây: fields (biểu mẫu), params (truy vấn), files, json."""
+    """The baskets that go on the wire: fields (form), params (query), files, json."""
     fields, params, files, jsonb = [], [], [], []
-    extras = []          # bbox / varfields — cần dựng riêng
+    extras = []          # bbox / varfields — built separately
     for arg in method.get("args", []):
         kind = arg["kind"]
         if kind == "field":
@@ -80,11 +83,11 @@ def wire_of(method):
         elif kind in ("path", "path_raw", "center_pair_other"):
             pass
         else:
-            raise SystemExit(f"kind lạ trong hợp đồng: {kind!r} ({method['name']})")
+            raise SystemExit(f"unknown kind in the contract: {kind!r} ({method['name']})")
     return fields, params, files, jsonb, extras
 
 
-# ── sinh Python ──────────────────────────────────────────────────────────────────────────────
+# ── Python output ────────────────────────────────────────────────────────────────────────────
 
 def py_signature(method):
     positional, optional = split_args(method)
@@ -206,7 +209,7 @@ def emit_python(contract, methods):
         "",
         "",
         "class GeneratedMethods:",
-        '    """Mọi cửa API, sinh từ hợp đồng. `Client` kế thừa lớp này và cấp `request()`."""',
+        '    """Every API endpoint, generated from the contract. `Client` inherits this class and provides `request()`."""',
         "",
         "    request: Any",
         "    timeout: float",
@@ -217,7 +220,7 @@ def emit_python(contract, methods):
     return "\n".join(out).rstrip() + "\n"
 
 
-# ── sinh JavaScript ──────────────────────────────────────────────────────────────────────────
+# ── JavaScript output ───────────────────────────────────────────────────────────────────────
 
 def js_signature(method):
     positional, optional = split_args(method)
@@ -339,7 +342,7 @@ def emit_javascript(contract, methods):
         "",
         "export const CONTRACT_VERSION = %s;" % js_lit(contract["contract_version"]),
         "",
-        "/** Mọi cửa API, sinh từ hợp đồng. `Client` kế thừa lớp này và cấp `request()`. */",
+        "/** Every API endpoint, generated from the contract. `Client` inherits this class and provides `request()`. */",
         "export class GeneratedMethods {",
     ]
     out.append("\n\n".join(js_method(m) for m in methods))
@@ -347,10 +350,10 @@ def emit_javascript(contract, methods):
     return "\n".join(out).rstrip() + "\n"
 
 
-# ── sinh bảng tra cho người đọc ──────────────────────────────────────────────────────────────
+# ── lookup table for people ──────────────────────────────────────────────────────────────────
 
 def emit_markdown(contract, methods):
-    rows = ["<!-- SINH TỰ ĐỘNG từ contract/methods.json — ĐỪNG SỬA TAY. -->",
+    rows = ["<!-- GENERATED from contract/methods.json — DO NOT EDIT BY HAND. -->",
             "# Method map",
             "",
             "Generated from `contract/methods.json` v%s by `tools/generate.py`."
@@ -396,7 +399,7 @@ def emit_markdown(contract, methods):
     return "\n".join(rows)
 
 
-# ── ghi / kiểm ───────────────────────────────────────────────────────────────────────────────
+# ── write / check ────────────────────────────────────────────────────────────────────────────
 
 def main(argv):
     check = "--check" in argv
@@ -419,14 +422,14 @@ def main(argv):
         else:
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(text)
-            print("đã ghi %s" % os.path.relpath(path, ROOT))
+            print("wrote %s" % os.path.relpath(path, ROOT))
     if check:
         if stale:
-            print("LỆCH — các tệp sinh không khớp hợp đồng: %s" % ", ".join(stale),
+            print("DRIFT — generated files do not match the contract: %s" % ", ".join(stale),
                   file=sys.stderr)
-            print("chạy `python3 tools/generate.py` rồi commit kết quả", file=sys.stderr)
+            print("run `python3 tools/generate.py` and commit the result", file=sys.stderr)
             return 1
-        print("KHỚP — %d cửa, các tệp sinh đúng bản hợp đồng v%s"
+        print("MATCH — %d methods, generated files match contract v%s"
               % (len(methods), contract["contract_version"]))
     return 0
 

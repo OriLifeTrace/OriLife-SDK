@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
-"""Đối chiếu `contract/methods.json` với đặc tả máy chủ đang chạy.
+"""Compare `contract/methods.json` with the specification of the running server.
 
-    python3 tools/check_server_drift.py                       # đo api.orilife.io
-    python3 tools/check_server_drift.py --base-url https://…  # đo một máy chủ khác
+    python3 tools/check_server_drift.py                       # measure api.orilife.io
+    python3 tools/check_server_drift.py --base-url https://…  # measure another server
 
-Trả về BA trạng thái, không phải hai:
+Returns THREE states, not two:
 
-    KHỚP           mã thoát 0 — mọi cửa trong hợp đồng đều có trong `/openapi.json` của máy chủ
-    LỆCH           mã thoát 1 — có cửa hợp đồng khai mà máy chủ không có
-    KHÔNG ĐO ĐƯỢC  mã thoát 2 — không lấy được đặc tả (mất mạng, máy chủ im, JSON hỏng)
+    MATCH          exit code 0 — every method in the contract is in the server's `/openapi.json`
+    DRIFT          exit code 1 — the contract declares an endpoint the server does not serve
+    UNMEASURABLE   exit code 2 — the specification could not be fetched (no network, silent
+                   server, broken JSON)
 
-Trạng thái thứ ba phải KÊU TO HƠN trạng thái thứ hai, và tuyệt đối không được im lặng thành màu
-xanh. Một phép đo trả "ổn" đúng lúc nó không đo được gì thì màu xanh của nó vô nghĩa: nó không nói
-"ổn", nó nói "tôi không biết" bằng giọng của "ổn".
+The third state must be LOUDER than the second, and must never fall silent into green. A
+measurement that reports "fine" exactly when it measured nothing makes its green meaningless: it
+does not say "fine", it says "I do not know" in the voice of "fine".
 
-Vì sao cần phép đo này. `CONTRACT.md` viết tay đã trôi khỏi máy chủ trong mười chín ngày: bản viết
-ngày 2026-08-20 khai `/api/identify/auto`, `/.well-known/orilife.json` và `/llms.txt` đều trả 404;
-đo lại ngày 2026-09-08 thì lần lượt là 405 (cửa có thật, chỉ nhận POST), 200 và 200. Không có gì
-báo trong suốt mười chín ngày ấy — bản sao chết trong im lặng, và người đọc TIN nó.
+Why this measurement is needed. A hand-written `CONTRACT.md` drifted away from the server for
+nineteen days: the version written on 2026-08-20 claimed `/api/identify/auto`,
+`/.well-known/orilife.json` and `/llms.txt` all answered 404; measured again on 2026-09-08 they
+answered 405 (the endpoint exists, it only takes POST), 200 and 200. Nothing reported it during
+those nineteen days — the copy died in silence, and readers TRUSTED it.
 
-Phép này KHÁC `tools/generate.py --check`. Cái kia hỏi "mã sinh có khớp hợp đồng không" (chạy
-được ngoại tuyến, luôn trả lời được). Cái này hỏi "hợp đồng có khớp máy chủ không" (cần mạng, có
-lúc không trả lời được). Hai câu hỏi khác nhau, hai cổng khác nhau, đừng gộp.
+This is DIFFERENT from `tools/generate.py --check`. That one asks "does the generated code match
+the contract" (runs offline, always answers). This one asks "does the contract match the server"
+(needs the network, sometimes cannot answer). Two different questions, two different gates; do
+not merge them.
 """
 from __future__ import annotations
 
@@ -39,7 +42,7 @@ MATCH, DRIFT, UNMEASURABLE = 0, 1, 2
 
 
 def fetch_spec(base_url: str, timeout: float):
-    """Trả về (đặc tả, lý do hỏng). Đúng một trong hai vế khác None."""
+    """Return (specification, failure reason). Exactly one of the two is not None."""
     url = base_url.rstrip("/") + "/openapi.json"
     try:
         req = urllib.request.Request(url, headers={"Accept": "application/json",
@@ -47,17 +50,17 @@ def fetch_spec(base_url: str, timeout: float):
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8")), None
     except urllib.error.HTTPError as e:
-        return None, f"máy chủ trả {e.code} ở {url}"
+        return None, f"the server answered {e.code} at {url}"
     except urllib.error.URLError as e:
-        return None, f"không tới được {url}: {e.reason}"
+        return None, f"could not reach {url}: {e.reason}"
     except (ValueError, TimeoutError) as e:
-        return None, f"đặc tả ở {url} không đọc được: {e}"
+        return None, f"the specification at {url} could not be read: {e}"
 
 
 def main(argv) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default=None,
-                        help="mặc định lấy từ contract/methods.json")
+                        help="defaults to the value in contract/methods.json")
     parser.add_argument("--timeout", type=float, default=20.0)
     opts = parser.parse_args(argv)
 
@@ -68,14 +71,14 @@ def main(argv) -> int:
 
     spec, why = fetch_spec(base_url, opts.timeout)
     if spec is None:
-        print("KHÔNG ĐO ĐƯỢC — %s" % why, file=sys.stderr)
-        print("Cổng này KHÔNG chạy lần này. Đừng đọc nó thành 'không có gì lệch'.", file=sys.stderr)
+        print("UNMEASURABLE — %s" % why, file=sys.stderr)
+        print("This gate did NOT run this time. Do not read it as 'nothing drifted'.", file=sys.stderr)
         return UNMEASURABLE
 
     paths = spec.get("paths")
     if not isinstance(paths, dict) or not paths:
-        print("KHÔNG ĐO ĐƯỢC — đặc tả tải về không có mục `paths` nào", file=sys.stderr)
-        print("Cổng này KHÔNG chạy lần này.", file=sys.stderr)
+        print("UNMEASURABLE — the downloaded specification has no `paths` section", file=sys.stderr)
+        print("This gate did NOT run this time.", file=sys.stderr)
         return UNMEASURABLE
 
     missing = []
@@ -90,27 +93,27 @@ def main(argv) -> int:
 
     title = spec.get("info", {}).get("title", "?")
     version = spec.get("info", {}).get("version", "?")
-    print("đo %s — %s v%s, đặc tả OpenAPI %s"
+    print("measured %s — %s v%s, OpenAPI %s"
           % (base_url, title, version, spec.get("openapi", "?")))
 
     if missing or wrong_verb:
-        print("LỆCH — hợp đồng khai những cửa máy chủ này không phục vụ:", file=sys.stderr)
+        print("DRIFT — the contract declares endpoints this server does not serve:", file=sys.stderr)
         for name, verb, path in missing:
-            print("  %-24s %s %s   ← không có trong /openapi.json" % (name, verb, path),
+            print("  %-24s %s %s   <- not in /openapi.json" % (name, verb, path),
                   file=sys.stderr)
         for name, verb, path, have in wrong_verb:
-            print("  %-24s %s %s   ← máy chủ chỉ nhận %s" % (name, verb, path, ", ".join(have)),
+            print("  %-24s %s %s   <- the server only accepts %s" % (name, verb, path, ", ".join(have)),
                   file=sys.stderr)
-        print("Sửa contract/methods.json rồi chạy tools/generate.py, HOẶC hỏi bên máy chủ vì sao"
-              " một cửa đã bàn giao lại biến mất.", file=sys.stderr)
+        print("Fix contract/methods.json and run tools/generate.py, OR find out from the server"
+              " side why an endpoint that was handed over has disappeared.", file=sys.stderr)
         return DRIFT
 
     wrapped = {m["path"] for m in methods}
-    print("KHỚP — mọi cửa trong hợp đồng đều có trong đặc tả máy chủ")
-    print("       %d cửa SDK, nằm trên %d đường; máy chủ khai %d đường."
+    print("MATCH — every method in the contract is in the server specification")
+    print("        %d SDK methods on %d paths; the server declares %d paths."
           % (len(methods), len(wrapped), len(paths)))
-    print("       Phần chênh KHÔNG phải lỗi: SDK cố ý chỉ bọc phần một bên tích hợp cần, chỗ còn")
-    print("       lại gọi thẳng bằng request().")
+    print("        The difference is NOT an error: the SDK deliberately wraps what an integration")
+    print("        needs; call anything else directly with request().")
     return MATCH
 
 

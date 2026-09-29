@@ -95,11 +95,11 @@ test('the summary separates a record missing fields from a record that was alter
   assert.equal(short.hashMatches, false);
 });
 
-test('bộ kiểm chứng không chạm tới mạng', () => {
-  // Phần ĐỌC phải chạy được khi mất mạng — đó là điều kiện vận hành, không phải ca hiếm. Một
-  // người mua đứng giữa vườn, sóng chập chờn, vẫn phải kiểm được tấm phiếu trên tay.
+test('the verifier touches no network', () => {
+  // The READ half must work offline — that is an operating condition, not a rare case. A buyer
+  // standing in an orchard with a flickering signal still has to be able to check the label in hand.
   const realFetch = globalThis.fetch;
-  globalThis.fetch = () => { throw new Error('bộ kiểm chứng vừa gọi ra mạng — nó phải chạy ngoại tuyến'); };
+  globalThis.fetch = () => { throw new Error('the verifier just called the network — it must run offline'); };
   try {
     assert.ok(verify.entityCode('cay-so-47', [11.5449, 107.4123]).startsWith('ORI-'));
     assert.equal(verify.recordHash(V.record), V.record_hash_sha3_256);
