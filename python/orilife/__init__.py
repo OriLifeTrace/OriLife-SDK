@@ -24,7 +24,7 @@ from .errors import (
     TooLargeError,
 )
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "Client", "DEFAULT_BASE_URL", "CONTRACT_VERSION", "verify", "__version__",

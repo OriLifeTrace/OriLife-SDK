@@ -6,8 +6,9 @@ when, where people misread the shapes, and what the system **deliberately refuse
 
 Base URL: `https://api.orilife.io`
 
-Everything below was checked against the running server implementation on 2026-08-20. Where a
-value could not be confirmed in code, it is marked **unconfirmed** rather than guessed.
+Everything below was checked against the running server implementation on 2026-08-20; the DID
+sign-in table in section 1 and sections 15-16 were checked on 2026-09-29. Where a value could not be
+confirmed in code, it is marked **unconfirmed** rather than guessed.
 
 **Contents** — [1. Authentication](#1-authentication) · [2. Farms](#2-farms) ·
 [3. Identify](#3-identify) · [4. Enrollment](#4-enrollment) · [5. Feedback](#5-feedback) ·
@@ -16,7 +17,9 @@ value could not be confirmed in code, it is marked **unconfirmed** rather than g
 [11. Sharing read access](#11-sharing-read-access) ·
 [12. Discovery and availability](#12-discovery-and-availability) ·
 [13. What the system will not answer](#13-what-the-system-will-not-answer) ·
-[14. SDK method map](#14-sdk-method-map)
+[14. SDK method map](#14-sdk-method-map) ·
+[15. Care, withdrawal and residue](#15-care-withdrawal-and-residue) ·
+[16. Managing what you enrolled](#16-managing-what-you-enrolled)
 
 ---
 
@@ -54,9 +57,18 @@ are not sent, so the cookie path only works same-origin.
 PhoenixKey is a separate decentralised-identity system. The DID endpoints let a holder of a
 PhoenixKey identity key prove control of that key (challenge, then signature) instead of sending a
 password. **If you do not already have a PhoenixKey identity, use username and password** — that is
-the ordinary path and every example in this repository uses it. Obtaining a PhoenixKey identity is
-outside the scope of this SDK, and the challenge/response payload shapes are **unconfirmed** here;
-read them from `/openapi.json` on the server you target.
+the ordinary path. Obtaining a PhoenixKey identity is outside the scope of this SDK.
+
+| Step | SDK | Wire |
+|---|---|---|
+| 1 | `did_challenge()` | `GET /api/auth/did/challenge` → `{ok, challenge, ttl}`; `ttl` is 300 seconds |
+| 2 | `login_with_did(did, challenge, signature, pubkey_hex=None)` | `POST /api/auth/did/verify`, **JSON** `{did, challenge, signature, pubkey_hex?}` → `{ok, token, owner, username}` |
+
+- `signature` is the DER-encoded ECDSA P-256 signature over the challenge, base64. The server takes
+  the DID's public key from PhoenixKey; `pubkey_hex`, when sent, must equal it.
+- A challenge is single-use. `401` = used, expired or not verified: ask for a new challenge.
+  `503` = PhoenixKey could not be reached: retry later, the user did nothing wrong.
+- `owner` in the answer is the DID itself, and the token is the same 12-hour kind `login()` returns.
 
 ---
 
@@ -456,7 +468,7 @@ account** private read access to a farm or a single tree.
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/grant` | Grant: `grantee` · `scope_type` · `scope_id` · `perms` · `ttl_days?` |
-| `GET /api/grants` | List grants you issued |
+| `GET /api/grants` | List grants you issued **and** grants issued to you, newest first; each carries `live` (active and not expired) |
 | `DELETE /api/grant/{grant_id}` | Revoke |
 | `GET /api/account/resolve` | Look up the account identifier to put in `grantee` |
 
@@ -504,7 +516,7 @@ That is the reason a sentence like this one cannot be the thing your code trusts
 3. `describe()` (the service descriptor) will raise `NotFoundError` on servers that do not ship it.
    That is the correct answer, not a bug.
 4. `tools/check_server_drift.py` compares `contract/methods.json` against the live
-   `/openapi.json` and reports **KHỚP / LỆCH / KHÔNG ĐO ĐƯỢC**. It runs in CI. That is what
+   `/openapi.json` and reports **MATCH / DRIFT / UNMEASURABLE**. It runs in CI. That is what
    noticing looks like when it is mechanical instead of hopeful.
 
 ---
@@ -538,3 +550,63 @@ which is why the table lives there and this section is a pointer.
 
 `contract/methods.json` also records, per endpoint, whether a failed call is safe to send again.
 That is the one policy nobody should have to re-derive by reading the code.
+
+---
+
+## 15. Care, withdrawal and residue
+
+| SDK | Wire | Notes |
+|---|---|---|
+| `match_care_product(text=, scope=, images=)` | `POST /api/care/match` | Label text and/or pack photos → `{ok, candidates[], banned_check}`, plus `banned[]`, `reason`, `message`, `ambiguous` when they apply |
+| `log_care(target_type, target_id, product_id, …)` | `POST /api/care/log` | `target_type` ∈ `tree`, `animal`, `farm`. The subject must exist and be yours: `404` / `403` otherwise |
+| `list_care_events` · `delete_care_event` | `GET /api/care/events` · `POST /api/care/delete` | |
+| `withdrawal_status(target_type, target_id)` | `GET /api/care/withdrawal` | `safe` has **three** states, see below |
+| `list_care_products` · `list_banned_substances` | `GET /api/care/products` · `GET /api/care/banned` | `503` from the banned list = the server has not loaded it |
+| `interpret_residue(market, measurements, …)` | `POST /api/residue/interpret`, **JSON** | Reads lab numbers against a market's limits. Measures, anchors and stores nothing |
+
+**`safe` is `true`, `false` or `null`, and `null` does not mean "may sell".** `false` = still in the
+withdrawal period; `null` = the server cannot tell (no withdrawal figure for that species) — block
+and show `advice`. Write `safe === true` for the allow branch. `safe !== false` folds "unknown" into
+"allowed".
+
+**`banned_check` is always present on a match:** `ok` (the banned list was consulted), `unavailable`
+(the list could not be read), `not_run` (there was no text to check). A matched product and a banned
+ingredient can come back together — read `banned` even when `candidates` is not empty.
+
+**`ambiguous: true`** means the top candidates are close and carry different withdrawal periods.
+The order is not an answer; let the person choose.
+
+`client_event_id` on `log_care` and `create_grant` is a retry key: send the same value when you
+resend the same press after a network failure, a new value for a new press.
+
+---
+
+## 16. Managing what you enrolled
+
+| Group | SDK methods |
+|---|---|
+| Tree record | `rename_tree` · `delete_tree` · `update_tree_location` · `set_tree_species` · `add_tree_marker` |
+| Visibility | `set_tree_visibility(tree_id, visibility, expose_location=, public_card=)` |
+| Placement | `set_tree_farm` · `set_tree_position` · `clear_tree_position` · `farm_map` · `farm_layout` · `tree_layout` |
+| Photos and change | `tree_views` · `remove_tree_views` · `tree_drift` · `capture_guidance` · `tree_growth` |
+| Declared profile | `get_tree_profile` · `update_tree_profile` (**JSON**) |
+| Video | `add_tree_video` · `add_fruit_video` (single file, longer timeout) |
+| 3D | `tree_model3d` · `public_tree_model3d` · `fruit_model3d` · `animal_model3d` |
+| Fruit | `detect_fruit` · `fruit_candidates` · `list_fruits` · `get_fruit` · `fruit_views` · `set_fruit_status` (**PATCH**) · `delete_fruit` |
+| Animals | `rename_animal` · `verify_animal` · `get_animal` · `delete_animal` · `detect_animal_species` · `animal_drift_report` |
+| Species gate | `scan_species` · `confirm_species` |
+| Livestock counts | `record_population_count` (**JSON**) · `population_dashboard` · `population_alerts` |
+| Asset DID | `entity_did` · `request_entity_did` · `submit_entity_did` — `entity_type` ∈ `tree`, `fruit`, `farm` |
+| Other | `magic_tasks` · `send_feedback` · `account_data` · `delete_account` · `resolve_account` |
+
+Where "left out" and "sent empty" mean different things, the SDK keeps them apart:
+
+- `set_tree_visibility`: `public_card` not given = keep the current value; `"0"` = hide the card.
+- `set_tree_farm` without `farm_id` detaches the tree from its farm.
+- `clear_tree_position` sends `clear=1` instead of empty coordinates.
+- `update_tree_profile` sends the mapping as it is: a key set to `None`/`null` deletes that field,
+  a key that is absent keeps it. Anything but a mapping is refused before sending.
+- `interpret_residue` and `record_population_count` leave options you did not pass **out** of the
+  JSON body, so each server default applies. (`phi_gate_open` is a boolean on the server; sent as
+  `null` it is refused with `422`.)
+- `remove_tree_views` and `create_grant` accept a list and send it as one comma-separated string.

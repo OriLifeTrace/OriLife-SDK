@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Sinh mã khách từ `contract/methods.json` — MỘT nguồn, nhiều bản cài.
+"""Generate the client code from `contract/methods.json` — ONE source, several implementations.
 
-    python3 tools/generate.py           # ghi lại các tệp sinh
-    python3 tools/generate.py --check   # không ghi; đỏ nếu tệp trên đĩa lệch bản sinh
+    python3 tools/generate.py           # rewrite the generated files
+    python3 tools/generate.py --check   # write nothing; red if a file on disk differs
 
-Vì sao có tệp này. Trước đây `python/orilife/client.py` và `javascript/src/client.js` là hai bản
-chép tay của cùng một hợp đồng: sửa một cửa phải nhớ sửa hai chỗ, và không có gì kêu khi một bên
-lệch. Hai lỗi đo được ngay lúc dựng tệp này — `create_farm` gửi `[10.762, 106.66]` bên Python và
-`[10.762,106.66]` bên JavaScript (khác BYTE), `update_farm` mã hoá JSON cho mảng ở Python mà không
-làm thế ở JavaScript — đều là loại lỗi không test nào bắt được, vì mỗi bên tự kiểm chính mình.
+Why this file exists. `python/orilife/client.py` and `javascript/src/client.js` used to be two
+hand-written copies of the same contract: changing one endpoint meant remembering to change two
+places, and nothing complained when one side drifted. Two bugs were measured when this file was
+built — `create_farm` sent `[10.762, 106.66]` from Python and `[10.762,106.66]` from JavaScript
+(different BYTES), and `update_farm` JSON-encoded an array in Python but not in JavaScript — both
+the kind of bug no test catches, because each side only tests itself.
 
-Bản sinh được COMMIT vào kho, không sinh lúc cài. Ba lý do: đọc được bằng mắt, hiện lên trong
-`git diff` khi hợp đồng đổi, và không bắt người dùng có Python để cài gói JavaScript. Cổng chống
-trôi là `--check` chạy trong CI: quên sinh lại thì CI đỏ, không phải chờ ai đó phát hiện.
+The generated output is COMMITTED, not generated at install time. Three reasons: it can be read,
+it shows up in `git diff` when the contract changes, and nobody needs Python to install the
+JavaScript package. The drift gate is `--check` in CI: forget to regenerate and CI goes red,
+instead of waiting for someone to notice.
 """
 from __future__ import annotations
 
@@ -28,13 +30,14 @@ PY_OUT = os.path.join(ROOT, "python", "orilife", "_generated.py")
 JS_OUT = os.path.join(ROOT, "javascript", "src", "generated.js")
 MD_OUT = os.path.join(ROOT, "contract", "METHODS.md")
 
-BANNER_PY = '"""SINH TỰ ĐỘNG từ contract/methods.json — ĐỪNG SỬA TAY.\n\nSửa hợp đồng rồi chạy `python3 tools/generate.py`. Sửa thẳng tệp này thì lần sinh sau mất hết,\nvà CI (`tools/generate.py --check`) đỏ ngay ở commit đó.\n"""'
-BANNER_JS = ("/**\n * SINH TỰ ĐỘNG từ contract/methods.json — ĐỪNG SỬA TAY.\n *\n"
-             " * Sửa hợp đồng rồi chạy `python3 tools/generate.py`. Sửa thẳng tệp này thì lần sinh\n"
-             " * sau mất hết, và CI (`tools/generate.py --check`) đỏ ngay ở commit đó.\n */")
+BANNER_PY = '"""GENERATED from contract/methods.json — DO NOT EDIT BY HAND.\n\nEdit the contract, then run `python3 tools/generate.py`. Edits made directly to this file are lost\nat the next generation, and CI (`tools/generate.py --check`) goes red on that very commit.\n"""'
+BANNER_JS = ("/**\n * GENERATED from contract/methods.json — DO NOT EDIT BY HAND.\n *\n"
+             " * Edit the contract, then run `python3 tools/generate.py`. Edits made directly to this\n"
+             " * file are lost at the next generation, and CI (`tools/generate.py --check`) goes red on\n"
+             " * that very commit.\n */")
 
 
-# ── tên định danh ────────────────────────────────────────────────────────────────────────────
+# ── identifiers ──────────────────────────────────────────────────────────────────────────────────
 
 def camel(snake: str) -> str:
     head, *rest = snake.split("_")
@@ -45,7 +48,7 @@ def js_lit(value) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-# ── đọc hợp đồng ─────────────────────────────────────────────────────────────────────────────
+# ── reading the contract───────────────────────────────────────────────────────────────────────
 
 def load():
     with open(CONTRACT, encoding="utf-8") as fh:
@@ -54,7 +57,7 @@ def load():
 
 
 def split_args(method):
-    """Tách tham số thành (vị trí, tuỳ chọn). `center_pair_other` đi kèm bạn của nó."""
+    """Split the arguments into (positional, optional). `center_pair_other` travels with its pair."""
     args = method.get("args", [])
     positional = [a for a in args if a.get("positional")]
     optional = [a for a in args if not a.get("positional")]
@@ -62,29 +65,46 @@ def split_args(method):
 
 
 def wire_of(method):
-    """Ba rổ đi lên dây: fields (biểu mẫu), params (truy vấn), files, json."""
+    """The baskets that go on the wire: fields (form), params (query), files, json."""
     fields, params, files, jsonb = [], [], [], []
-    extras = []          # bbox / varfields — cần dựng riêng
+    extras = []          # bbox / varfields — built separately
     for arg in method.get("args", []):
         kind = arg["kind"]
-        if kind == "field":
+        if kind in ("field", "csv"):
             fields.append(arg)
         elif kind == "param":
             params.append(arg)
         elif kind in ("file", "files", "one_file"):
             files.append(arg)
-        elif kind in ("json", "json_payload"):
+        elif kind in ("json", "json_payload", "json_object"):
             jsonb.append(arg)
         elif kind in ("bbox", "varfields", "center_pair"):
             extras.append(arg)
         elif kind in ("path", "path_raw", "center_pair_other"):
             pass
         else:
-            raise SystemExit(f"kind lạ trong hợp đồng: {kind!r} ({method['name']})")
+            raise SystemExit(f"unknown kind in the contract: {kind!r} ({method['name']})")
+    if any(a["kind"] == "json_object" for a in jsonb) and len(jsonb) != 1:
+        raise SystemExit(f"a json_object argument must be the whole body ({method['name']})")
     return fields, params, files, jsonb, extras
 
 
-# ── sinh Python ──────────────────────────────────────────────────────────────────────────────
+def drops_empty_json(jsonb):
+    """True when a JSON body has optional keys.
+
+    An optional key left out must be ABSENT from the body, not `null`: Python would send `null`
+    and JavaScript would drop the key, so the two languages would disagree on the wire — and a
+    server field typed `bool` answers `null` with 422. Required-only bodies are left as they are.
+    """
+    return any(a["kind"] == "json" and not a.get("required") for a in jsonb)
+
+
+def optional_file(arg):
+    """A single file the endpoint accepts but does not require."""
+    return arg["kind"] == "file" and not arg.get("required")
+
+
+# ── Python output ────────────────────────────────────────────────────────────────────────────
 
 def py_signature(method):
     positional, optional = split_args(method)
@@ -119,7 +139,8 @@ def py_method(method):
     fields, params, files, jsonb, extras = wire_of(method)
     body = []
 
-    dict_items = [f'{js_lit(a["field"])}: {a["name"]}' for a in fields]
+    dict_items = [f'{js_lit(a["field"])}: '
+                  + (f'_csv({a["name"]})' if a["kind"] == "csv" else a["name"]) for a in fields]
     dict_items += [f"{js_lit(k)}: {js_lit(v)}" for k, v in (method.get("constants") or {}).items()]
     for arg in extras:
         if arg["kind"] == "center_pair":
@@ -154,14 +175,23 @@ def py_method(method):
         elif arg["kind"] == "one_file":
             call.append('files=[(%s, _one_file(%s, %s))]'
                         % (js_lit(arg["field"]), arg["name"], js_lit(arg["error"])))
+        elif optional_file(arg):
+            call.append('files=[(%s, %s)] if %s is not None else None'
+                        % (js_lit(arg["field"]), arg["name"], arg["name"]))
         else:
             call.append('files=[(%s, %s)]' % (js_lit(arg["field"]), arg["name"]))
-    if jsonb:
+    if jsonb and jsonb[0]["kind"] == "json_object":
+        call.append("json_body=_json_object(%s, %s)"
+                    % (jsonb[0]["name"], js_lit(method["name"])))
+    elif jsonb:
         pairs = []
         for arg in jsonb:
             value = f"{arg['name']} or {{}}" if arg["kind"] == "json_payload" else arg["name"]
             pairs.append(f'{js_lit(arg["field"])}: {value}')
-        call.append("json_body={%s}" % ", ".join(pairs))
+        body_expr = "{%s}" % ", ".join(pairs)
+        if drops_empty_json(jsonb):
+            body_expr = "_drop_empty(%s)" % body_expr
+        call.append("json_body=%s" % body_expr)
     if method.get("timeout_min_seconds"):
         call.append("timeout=max(self.timeout, %.1f)" % float(method["timeout_min_seconds"]))
     request = ",\n            ".join(call) + ")"
@@ -197,8 +227,8 @@ def emit_python(contract, methods):
         "",
         "from typing import Any",
         "",
-        "from ._wire import (_as_file_list, _bbox_fields, _center_json, _encode_containers,",
-        "                    _one_file, _quote)",
+        "from ._wire import (_as_file_list, _bbox_fields, _center_json, _csv, _drop_empty,",
+        "                    _encode_containers, _json_object, _one_file, _quote)",
         "",
         '__all__ = ["GeneratedMethods", "CONTRACT_VERSION"]',
         "",
@@ -206,7 +236,7 @@ def emit_python(contract, methods):
         "",
         "",
         "class GeneratedMethods:",
-        '    """Mọi cửa API, sinh từ hợp đồng. `Client` kế thừa lớp này và cấp `request()`."""',
+        '    """Every API endpoint, generated from the contract. `Client` inherits this class and provides `request()`."""',
         "",
         "    request: Any",
         "    timeout: float",
@@ -217,7 +247,7 @@ def emit_python(contract, methods):
     return "\n".join(out).rstrip() + "\n"
 
 
-# ── sinh JavaScript ──────────────────────────────────────────────────────────────────────────
+# ── JavaScript output ───────────────────────────────────────────────────────────────────────
 
 def js_signature(method):
     positional, optional = split_args(method)
@@ -257,7 +287,9 @@ def js_method(method):
         pairs = ", ".join("%s: %s" % (camel(a["name"]), camel(a["name"])) for a in required)
         lines.append("requireArgs(%s, { %s });" % (js_lit(camel(method["name"])), pairs))
 
-    dict_items = ["%s: %s" % (js_lit(a["field"]), camel(a["name"])) for a in fields]
+    dict_items = ["%s: %s" % (js_lit(a["field"]),
+                              ("csvField(%s)" % camel(a["name"])) if a["kind"] == "csv"
+                              else camel(a["name"])) for a in fields]
     dict_items += ["%s: %s" % (js_lit(k), js_lit(v)) for k, v in (method.get("constants") or {}).items()]
     for arg in extras:
         if arg["kind"] == "center_pair":
@@ -289,14 +321,24 @@ def js_method(method):
         elif arg["kind"] == "one_file":
             opts.append("files: [[%s, oneFile(%s, %s)]]"
                         % (js_lit(arg["field"]), camel(arg["name"]), js_lit(arg["error"])))
+        elif optional_file(arg):
+            opts.append("files: (%s === undefined || %s === null) ? [] : [[%s, %s]]"
+                        % (camel(arg["name"]), camel(arg["name"]), js_lit(arg["field"]),
+                           camel(arg["name"])))
         else:
             opts.append("files: [[%s, %s]]" % (js_lit(arg["field"]), camel(arg["name"])))
-    if jsonb:
+    if jsonb and jsonb[0]["kind"] == "json_object":
+        opts.append("json: jsonObject(%s, %s)"
+                    % (camel(jsonb[0]["name"]), js_lit(camel(method["name"]))))
+    elif jsonb:
         pairs = []
         for arg in jsonb:
             value = "%s || {}" % camel(arg["name"]) if arg["kind"] == "json_payload" else camel(arg["name"])
             pairs.append("%s: %s" % (js_lit(arg["field"]), value))
-        opts.append("json: { %s }" % ", ".join(pairs))
+        body_expr = "{ %s }" % ", ".join(pairs)
+        if drops_empty_json(jsonb):
+            body_expr = "dropEmpty(%s)" % body_expr
+        opts.append("json: %s" % body_expr)
     if method.get("timeout_min_seconds"):
         opts.append("timeout: Math.max(this.timeout, %d)" % (int(method["timeout_min_seconds"]) * 1000))
 
@@ -335,11 +377,14 @@ def js_method(method):
 def emit_javascript(contract, methods):
     out = [
         BANNER_JS,
-        "import { asFileList, bboxFields, centerJson, encodeContainers, oneFile, requireArgs } from './wire.js';",
+        "import {",
+        "  asFileList, bboxFields, centerJson, csvField, dropEmpty, encodeContainers, jsonObject, oneFile,",
+        "  requireArgs,",
+        "} from './wire.js';",
         "",
         "export const CONTRACT_VERSION = %s;" % js_lit(contract["contract_version"]),
         "",
-        "/** Mọi cửa API, sinh từ hợp đồng. `Client` kế thừa lớp này và cấp `request()`. */",
+        "/** Every API endpoint, generated from the contract. `Client` inherits this class and provides `request()`. */",
         "export class GeneratedMethods {",
     ]
     out.append("\n\n".join(js_method(m) for m in methods))
@@ -347,10 +392,10 @@ def emit_javascript(contract, methods):
     return "\n".join(out).rstrip() + "\n"
 
 
-# ── sinh bảng tra cho người đọc ──────────────────────────────────────────────────────────────
+# ── lookup table for people ──────────────────────────────────────────────────────────────────
 
 def emit_markdown(contract, methods):
-    rows = ["<!-- SINH TỰ ĐỘNG từ contract/methods.json — ĐỪNG SỬA TAY. -->",
+    rows = ["<!-- GENERATED from contract/methods.json — DO NOT EDIT BY HAND. -->",
             "# Method map",
             "",
             "Generated from `contract/methods.json` v%s by `tools/generate.py`."
@@ -396,7 +441,7 @@ def emit_markdown(contract, methods):
     return "\n".join(rows)
 
 
-# ── ghi / kiểm ───────────────────────────────────────────────────────────────────────────────
+# ── write / check ────────────────────────────────────────────────────────────────────────────
 
 def main(argv):
     check = "--check" in argv
@@ -419,14 +464,14 @@ def main(argv):
         else:
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(text)
-            print("đã ghi %s" % os.path.relpath(path, ROOT))
+            print("wrote %s" % os.path.relpath(path, ROOT))
     if check:
         if stale:
-            print("LỆCH — các tệp sinh không khớp hợp đồng: %s" % ", ".join(stale),
+            print("DRIFT — generated files do not match the contract: %s" % ", ".join(stale),
                   file=sys.stderr)
-            print("chạy `python3 tools/generate.py` rồi commit kết quả", file=sys.stderr)
+            print("run `python3 tools/generate.py` and commit the result", file=sys.stderr)
             return 1
-        print("KHỚP — %d cửa, các tệp sinh đúng bản hợp đồng v%s"
+        print("MATCH — %d methods, generated files match contract v%s"
               % (len(methods), contract["contract_version"]))
     return 0
 

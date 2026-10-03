@@ -157,7 +157,56 @@ await client.listTrees({ farmId: farm.farm_id });
 
 **Evidence** — `provenance` · `timeline` · `proof` · `addEvent` · `anchorEvent`
 
-Two of these deserve a paragraph rather than a slot in a list.
+**DID sign-in and account** — `didChallenge` · `loginWithDid` · `accountData` · `deleteAccount` ·
+`resolveAccount`
+
+**Sharing** — `createGrant` · `listGrants` · `revokeGrant`
+
+**Care and residue** — `matchCareProduct` · `logCare` · `listCareEvents` · `deleteCareEvent` ·
+`withdrawalStatus` · `listCareProducts` · `listBannedSubstances` · `interpretResidue`
+
+**Managing trees** — `renameTree` · `deleteTree` · `updateTreeLocation` · `setTreeVisibility` ·
+`setTreeFarm` · `setTreePosition` · `clearTreePosition` · `setTreeSpecies` · `addTreeMarker` ·
+`treeViews` · `removeTreeViews` · `treeDrift` · `captureGuidance` · `treeGrowth` · `getTreeProfile`
+· `updateTreeProfile` · `addTreeVideo` · `addFruitVideo`
+
+**Maps and 3D** — `farmMap` · `farmLayout` · `treeLayout` · `treeModel3d` · `publicTreeModel3d` ·
+`fruitModel3d` · `animalModel3d`
+
+**Fruit** — `detectFruit` · `fruitCandidates` · `listFruits` · `getFruit` · `fruitViews` ·
+`setFruitStatus` · `deleteFruit`
+
+**Animals and livestock** — `renameAnimal` · `verifyAnimal` · `getAnimal` · `deleteAnimal` ·
+`detectAnimalSpecies` · `animalDriftReport` · `recordPopulationCount` · `populationDashboard` ·
+`populationAlerts`
+
+**Species gate** — `scanSpecies` · `confirmSpecies`
+
+**Asset DID** — `entityDid` · `requestEntityDid` · `submitEntityDid`
+
+**Other** — `magicTasks` · `sendFeedback`
+
+Exact paths and fields for every method: [`contract/METHODS.md`](../contract/METHODS.md).
+
+```js
+// Sign in with a PhoenixKey DID: sign the challenge on the device, never on the server.
+const ch = await client.didChallenge();
+await client.loginWithDid(did, ch.challenge, await signOnDevice(ch.challenge));
+
+// Care: read the label, log the spray, then ask whether harvest is allowed.
+const found = await client.matchCareProduct({ text: 'Ridomil Gold 68WG', scope: 'sau_rieng' });
+if (found.banned) show(found.message);             // banned or restricted ingredient on the label
+await client.logCare('tree', treeId, personPicks(found.candidates).product_id, { clientEventId });
+const w = await client.withdrawalStatus('tree', treeId);
+const mayHarvest = w.safe === true;                // false AND null both mean: not yet
+
+// Share a private farm read-only for 30 days.
+const who = await client.resolveAccount('worker_1');
+const g = await client.createGrant(who.owner, 'farm', farmId, ['read_private'], { ttlDays: 30 });
+await client.revokeGrant(g.grant.grant_id);
+```
+
+Two of the older methods deserve a paragraph rather than a slot in a list.
 
 **`capturePlan(entityType, entityId)`** says what is still missing and what to photograph next.
 Call it when the capture screen opens, and again right after a rejected attempt: it turns "not good

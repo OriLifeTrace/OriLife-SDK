@@ -1,6 +1,6 @@
 {
   "name": "@orilife/sdk",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Identify individual trees, fruits and animals from photographs — the official OriLife SDK",
   "type": "module",
   "main": "./src/index.js",

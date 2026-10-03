@@ -125,16 +125,16 @@ def test_sha256_helper_is_the_plain_one():
 
 
 def test_the_verifier_touches_no_network(monkeypatch):
-    """Phần ĐỌC phải chạy được khi mất mạng — đó là điều kiện vận hành, không phải ca hiếm.
+    """The READ half must work offline — that is an operating condition, not a rare case.
 
-    Một người mua đứng giữa vườn, sóng chập chờn, vẫn phải kiểm được tấm phiếu trên tay. Nên chỗ
-    này chặn TẬN gốc: cấm mở socket, rồi chạy đúng những hàm mà người kiểm sẽ gọi. Ném ở đây nghĩa
-    là bộ kiểm chứng đã lén gọi ra ngoài.
+    A buyer standing in an orchard with a flickering signal still has to be able to check the label
+    in hand. So this blocks it at the root: opening a socket is forbidden, then exactly the
+    functions a checker would call are run. Raising here means the verifier quietly called out.
     """
     import socket
 
     def _forbidden(*a, **kw):
-        raise AssertionError("bộ kiểm chứng vừa mở kết nối mạng — nó phải chạy ngoại tuyến")
+        raise AssertionError("the verifier just opened a network connection — it must run offline")
 
     monkeypatch.setattr(socket, "socket", _forbidden)
     monkeypatch.setattr(socket, "create_connection", _forbidden)

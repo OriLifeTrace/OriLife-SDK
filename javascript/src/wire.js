@@ -1,25 +1,27 @@
 /**
- * Cách dựng thân yêu cầu — dùng chung cho mọi cửa, và phải KHỚP TỪNG BYTE với bản Python.
+ * How request bodies are built — shared by every endpoint, and it must MATCH the Python version
+ * byte for byte.
  *
- * Tệp này là bản JavaScript của `python/orilife/_wire.py`. Hai tệp cố ý viết cùng một phép biến
- * đổi, và `contract/conformance.json` là thứ giữ chúng bằng nhau: mỗi ca trong đó khai đúng cái đi
- * lên dây, rồi cả hai ngôn ngữ chạy lại đúng danh sách ca ấy.
+ * This file is the JavaScript twin of `python/orilife/_wire.py`. The two files deliberately
+ * implement the same transformation, and `contract/conformance.json` is what keeps them equal:
+ * every case in it declares exactly what goes on the wire, and both languages replay the same list
+ * of cases.
  *
- * Cái đã sai trước khi có tệp này (đo 2026-09-08, trên bản `origin/main`) — lý do đầy đủ nằm ở
- * đầu tệp `_wire.py` bên Python, không chép lại ở đây.
+ * What was wrong before this file existed (measured 2026-09-08, on `origin/main`) — the full story
+ * is at the top of the Python `_wire.py`, not repeated here.
  */
 
-/** Gom "một ảnh hoặc nhiều ảnh" về một mảng. Một ảnh lẻ không phải mảng, và chuỗi cũng không. */
+/** Turn "one image or several images" into an array. A lone image is not an array, nor is a string. */
 export function asFileList(images) {
   if (images === null || images === undefined) return [];
   return Array.isArray(images) ? images.slice() : [images];
 }
 
 /**
- * Đúng MỘT ảnh cho cửa chỉ nhận một ảnh — thừa thì ném, đừng lặng lẽ bỏ bớt.
+ * Exactly ONE image for an endpoint that takes one image — throw on extras, never drop them quietly.
  *
- * Gửi nhiều phần cùng tên `file` KHÔNG tải lên nhiều góc: máy chủ đọc phần đầu, phần còn lại biến
- * mất không một lời. Mất một tấm ảnh trong im lặng tệ hơn một lỗi.
+ * Sending several parts named `file` does NOT upload several angles: the server reads the first
+ * part and the rest disappear without a word. Losing a photo in silence is worse than an error.
  */
 export function oneFile(images, message) {
   const items = asFileList(images);
@@ -28,10 +30,11 @@ export function oneFile(images, message) {
 }
 
 /**
- * Khung bao thành bốn trường biểu mẫu máy chủ chờ. Nhận `[x, y, w, h]` hoặc `{ x, y, w, h }`.
+ * A bounding box as the four form fields the server expects. Accepts `[x, y, w, h]` or
+ * `{ x, y, w, h }`.
  *
- * Thứ khác thì ném: một khung bị bỏ qua trong im lặng nghĩa là quả được ghi từ CẢ khung hình thay
- * vì từ quả — một bản ghi sai, tệ hơn một lỗi nhìn thấy được.
+ * Anything else throws: a box that is silently ignored means the fruit is recorded from the WHOLE
+ * frame instead of from the fruit — a wrong record, which is worse than a visible error.
  */
 export function bboxFields(bbox) {
   if (bbox === undefined || bbox === null) return {};
@@ -52,17 +55,18 @@ export function bboxFields(bbox) {
   };
 }
 
-/** Tâm vườn: đủ CẢ hai nửa mới gửi. Nửa toạ-độ không phải một chỗ nào cả. */
+/** Farm centre: send it only when BOTH halves are present. Half a coordinate is not a place. */
 export function centerJson(lat, lon) {
   if (lat === null || lat === undefined || lon === null || lon === undefined) return undefined;
   return JSON.stringify([lat, lon]);
 }
 
 /**
- * Trường tự do: mảng và ánh xạ mã hoá JSON, còn lại giữ nguyên; rỗng thì loại.
+ * Free-form fields: arrays and objects are JSON-encoded, everything else is kept; empty values are
+ * dropped.
  *
- * `boundary_json: [[lat, lon], …]` phải tới máy chủ dưới dạng CHUỖI JSON. Để nguyên rồi phó mặc
- * `URLSearchParams` thì nó gọi `String([[10.7,106.6]])` và gửi lên `10.7,106.6`.
+ * `boundary_json: [[lat, lon], …]` must reach the server as a JSON STRING. Leaving it to
+ * `URLSearchParams` means it calls `String([[10.7,106.6]])` and sends `10.7,106.6`.
  */
 export function encodeContainers(fields) {
   const out = {};
@@ -74,12 +78,45 @@ export function encodeContainers(fields) {
 }
 
 /**
- * Tham số bắt buộc mà thiếu thì ném NGAY, trước khi tải ảnh lên.
+ * An array as the ONE comma-separated string some endpoints expect (`'0,2,5'`). A string passes
+ * through untouched; an empty value stays empty so the field is left out. The Python twin exists
+ * because Python would otherwise send `'[0, 2, 5]'`.
+ */
+export function csvField(value) {
+  if (Array.isArray(value)) return value.map((v) => String(v)).join(',');
+  return value;
+}
+
+/**
+ * A JSON body without the optional keys that were left out. `JSON.stringify` already drops
+ * `undefined`, but not `null` — and Python sends `null` for both, so without this the two
+ * languages would put different bodies on the wire.
+ */
+export function dropEmpty(body) {
+  const out = {};
+  for (const [k, v] of Object.entries(body)) if (v !== undefined && v !== null) out[k] = v;
+  return out;
+}
+
+/**
+ * A caller-built object sent AS the JSON body, keys and `null` values kept as given — the presence
+ * of a key carries meaning of its own there (absent = keep, `null` = delete). Anything but a plain
+ * object throws before sending.
+ */
+export function jsonObject(value, method) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`${method}() takes an object as its JSON body`);
+  }
+  return { ...value };
+}
+
+/**
+ * A required argument that is missing throws AT ONCE, before any image is uploaded.
  *
- * Bên Python việc này do chính ngôn ngữ làm (tham số chỉ-từ-khoá không mặc định). Bên JavaScript
- * một khoá thiếu chỉ là `undefined`, rồi trường bị loại lúc dựng biểu mẫu, rồi vài megabyte ảnh
- * đi lên một cửa chắc chắn từ chối — trên đường truyền yếu đó là cả phút chờ để nhận một lỗi lẽ
- * ra biết trước.
+ * In Python the language does this itself (keyword-only parameters without a default). In
+ * JavaScript a missing key is just `undefined`, the field is then dropped while the form is built,
+ * and a few megabytes of images travel to an endpoint that is certain to refuse them — on a weak
+ * connection that is a full minute of waiting for an error that could have been known up front.
  */
 export function requireArgs(method, args) {
   const missing = Object.keys(args).filter((k) => args[k] === undefined || args[k] === null);
@@ -88,7 +125,7 @@ export function requireArgs(method, args) {
   }
 }
 
-/** Một tệp gửi lên: `Blob`/`File`, hoặc `{ name, data }` với `data` là Blob/ArrayBuffer/Uint8Array. */
+/** One uploaded file: a `Blob`/`File`, or `{ name, data }` where `data` is a Blob/ArrayBuffer/Uint8Array. */
 export function toBlob(item) {
   if (typeof Blob !== 'undefined' && item instanceof Blob) return { blob: item, name: item.name || 'upload.jpg' };
   if (item && item.data !== undefined) {
