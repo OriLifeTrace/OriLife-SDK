@@ -10,7 +10,7 @@ on:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, tiger, isolated]
     strategy:
       matrix:
         # 3.9 is the floor promised in pyproject. A promise nobody runs is not a promise.
@@ -25,7 +25,7 @@ jobs:
         working-directory: python
 
   javascript:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, tiger, isolated]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,7 +38,7 @@ jobs:
     # The client code is generated from `contract/methods.json` and COMMITTED. Changing the
     # contract and forgetting to regenerate raises no alarm — except this step. It runs offline and
     # always answers, so it is RED on drift, with no third state.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, tiger, isolated]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,7 +51,7 @@ jobs:
     # `import requests` turns no test red — it only stops the package from running in exactly the
     # places it exists for: an embedded device in a field, a sandboxed automated client, a
     # serverless function with a size cap.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, tiger, isolated]
     steps:
       - uses: actions/checkout@v4
       - name: Python uses the standard library only
@@ -76,7 +76,7 @@ jobs:
     # THREE states, not two. Real drift is RED. When the specification cannot be fetched, leave a
     # warning that SAYS the gate did NOT run — never fall silent into green, because "I do not
     # know" said in the voice of "fine" is more dangerous than a wrong answer.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, tiger, isolated]
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
