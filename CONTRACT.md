@@ -416,9 +416,9 @@ These return HTML or SVG, not JSON. Open them in a browser or web view; do not p
 | HTTP | Body | When |
 |---|---|---|
 | `200` | Full public page | The tree is published, or the viewer is its owner |
-| `200` | Minimal card | Real, not published |
+| `200` | Minimal card | Real tree, not published, and its owner has switched on the public card |
 | `307` | Redirect | The code belongs to a market booth; follow the `Location` header |
-| `404` | HTML "not found" page | Not resolvable (same answer for bad, unknown and private-to-someone-else) |
+| `404` | HTML "not found" page | Not resolvable: a bad or unknown code, a private tree without the public card, or a fruit whose parent tree the viewer cannot read. All give the same page |
 | `429` | HTML page, `Retry-After` header | Gateway rate limit |
 
 `/qr/{code}` errors are always `text/plain`:
