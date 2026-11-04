@@ -401,6 +401,38 @@ infer.
 The public gateway is rate-limited separately and returns `429` with `retry_after` and a
 `Retry-After` header.
 
+### Pages for people: `/t/{code}`, `/r/{code}`, `/qr/{code}`
+
+These return HTML or SVG, not JSON. Open them in a browser or web view; do not parse them.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /t/{code}` | HTML page for one tree. This is the URL encoded in every printed QR code, so the path is permanent |
+| `GET /r/{code}` | Same page as `/t/{code}`; a shorter path for typing a code by hand |
+| `GET /qr/{code}` | SVG image of a QR code whose content is `{PUBLIC_BASE_URL}/t/{code}` |
+
+`/t/{code}` and `/r/{code}` follow the same three states as `/api/resolve/{code}`:
+
+| HTTP | Body | When |
+|---|---|---|
+| `200` | Full public page | The tree is published, or the viewer is its owner |
+| `200` | Minimal card | Real, not published |
+| `307` | Redirect | The code belongs to a market booth; follow the `Location` header |
+| `404` | HTML "not found" page | Not resolvable (same answer for bad, unknown and private-to-someone-else) |
+| `429` | HTML page, `Retry-After` header | Gateway rate limit |
+
+`/qr/{code}` errors are always `text/plain`:
+
+| HTTP | Body | When |
+|---|---|---|
+| `200` | `image/svg+xml`, `Cache-Control: private, no-store` | Tree is public, or the viewer owns it or holds a read grant |
+| `400` | `Mã cây không hợp lệ.` | The code is not in the format the server issues. This says nothing about existence |
+| `404` | `Không tìm thấy mã cây này.` | Unknown, or private and the viewer has no right to it (no difference to infer) |
+| `503` | text | QR generation is unavailable on this server |
+
+A guest cannot render a QR for a private tree, so `/qr/` cannot be used to confirm that a private
+code exists.
+
 ---
 
 ## 9. Errors
